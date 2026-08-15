@@ -2,41 +2,66 @@ name: Build Windows EXE
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.16.0'
-          channel: 'stable'
-          cache: true
-
-      - name: Enable Windows support
-        run: flutter config --enable-windows-desktop
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Build Windows EXE
-        run: flutter build windows --release
-
-      - name: Create ZIP archive
-        shell: powershell
-        run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath presentation_pro_windows.zip
-
-      - name: Upload Windows EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: presentation-pro-windows
-          path: presentation_pro_windows.zip
-          retention-days: 30
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter 3.44.7
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.44.7'
+        channel: 'stable'
+        cache: true
+    
+    - name: Verify Flutter installation
+      run: |
+        flutter --version
+        dart --version
+    
+    - name: Enable Windows support
+      run: flutter config --enable-windows-desktop
+    
+    - name: Clean previous build
+      run: flutter clean
+    
+    - name: Get dependencies
+      run: flutter pub get
+    
+    - name: Build Windows EXE
+      run: flutter build windows --release
+    
+    - name: List build output
+      shell: powershell
+      run: |
+        Get-ChildItem -Path build\windows\x64\runner\Release\ -Recurse | Select-Object FullName, Length
+    
+    - name: Create ZIP archive
+      shell: powershell
+      run: |
+        $zipName = "presentation_pro_windows.zip"
+        if (Test-Path $zipName) { Remove-Item $zipName }
+        Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath $zipName
+    
+    - name: Upload Windows EXE ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: presentation-pro-windows
+        path: presentation_pro_windows.zip
+        retention-days: 30
+    
+    - name: Upload individual files
+      uses: actions/upload-artifact@v4
+      with:
+        name: presentation-pro-windows-files
+        path: |
+          build/windows/x64/runner/Release/*.exe
+          build/windows/x64/runner/Release/*.dll
+          build/windows/x64/runner/Release/data/
+        retention-days: 30
