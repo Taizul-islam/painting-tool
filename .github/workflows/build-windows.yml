@@ -4,11 +4,6 @@ on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      flutter_version:
-        description: 'Flutter version to use'
-        required: false
-        default: '3.16.0'
 
 jobs:
   build-windows:
@@ -18,24 +13,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup Flutter
+    - name: Setup Flutter 3.44.7
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.16.0'
+        flutter-version: '3.44.7'
         channel: 'stable'
         cache: true
     
     - name: Verify Flutter installation
-      run: flutter --version
+      run: |
+        flutter --version
+        dart --version
     
     - name: Enable Windows support
       run: flutter config --enable-windows-desktop
     
+    - name: Clean previous build
+      run: flutter clean
+    
     - name: Get dependencies
       run: flutter pub get
-    
-    - name: Analyze code
-      run: flutter analyze || true
     
     - name: Build Windows EXE
       run: flutter build windows --release
@@ -48,7 +45,9 @@ jobs:
     - name: Create ZIP archive
       shell: powershell
       run: |
-        Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath presentation_pro_windows.zip
+        $zipName = "presentation_pro_windows.zip"
+        if (Test-Path $zipName) { Remove-Item $zipName }
+        Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath $zipName
     
     - name: Upload Windows EXE ZIP
       uses: actions/upload-artifact@v4
