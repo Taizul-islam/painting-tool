@@ -140,7 +140,7 @@ class _PresentationScreenState extends State<PresentationScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Presentation Pro',
+              'Presentation Pro v1.0.1',
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
