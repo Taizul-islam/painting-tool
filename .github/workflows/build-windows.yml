@@ -2,34 +2,29 @@ name: Build Windows EXE
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    tags:
+      - 'v*' # Trigger on version tags like v1.0.0
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write # Needed for creating releases
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup Flutter 3.44.7
+    - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.44.7'
+        flutter-version: '3.24.2'
         channel: 'stable'
         cache: true
     
-    - name: Verify Flutter installation
-      run: |
-        flutter --version
-        dart --version
-    
     - name: Enable Windows support
       run: flutter config --enable-windows-desktop
-    
-    - name: Clean previous build
-      run: flutter clean
     
     - name: Get dependencies
       run: flutter pub get
@@ -37,31 +32,35 @@ jobs:
     - name: Build Windows EXE
       run: flutter build windows --release
     
-    - name: List build output
-      shell: powershell
-      run: |
-        Get-ChildItem -Path build\windows\x64\runner\Release\ -Recurse | Select-Object FullName, Length
-    
     - name: Create ZIP archive
       shell: powershell
       run: |
-        $zipName = "presentation_pro_windows.zip"
-        if (Test-Path $zipName) { Remove-Item $zipName }
+        $zipName = "presentation_pro_v${{ github.ref_name }}_windows.zip"
+        # If triggered manually without a tag, use a default name
+        if ("${{ github.ref_type }}" -ne "tag") { $zipName = "presentation_pro_manual_windows.zip" }
         Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath $zipName
+        echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
     
-    - name: Upload Windows EXE ZIP
+    - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: presentation-pro-windows
-        path: presentation_pro_windows.zip
+        path: ${{ env.ZIP_NAME }}
         retention-days: 30
     
-    - name: Upload individual files
-      uses: actions/upload-artifact@v4
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
       with:
-        name: presentation-pro-windows-files
-        path: |
-          build/windows/x64/runner/Release/*.exe
-          build/windows/x64/runner/Release/*.dll
-          build/windows/x64/runner/Release/data/
-        retention-days: 30
+        files: ${{ env.ZIP_NAME }}
+        body: |
+          Professional Presentation Painting Tool - Windows Release.
+          
+          **Release Notes:**
+          - Initial Windows release with PPTX and PDF support.
+          - High-performance lazy rendering for large files.
+          - Real-time drawing and annotation tools.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

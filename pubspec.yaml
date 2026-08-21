@@ -19,6 +19,11 @@ dependencies:
   flutter_svg: ^2.3.0
   google_fonts: ^8.2.1
   provider: ^6.1.5+1
+  file_picker: ^12.0.0
+  pdfrx: ^2.4.7
+  path_provider: ^2.1.6
+  microsoft_viewer: ^0.0.8
+  archive: ^4.1.0
 
 dev_dependencies:
   flutter_test:

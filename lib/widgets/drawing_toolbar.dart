@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/drawing_stroke.dart';
 
-class DrawingToolbar extends StatelessWidget {
+class DrawingToolbar extends StatefulWidget {
   final Color selectedColor;
   final double strokeWidth;
   final DrawingTool selectedTool;
@@ -29,6 +29,19 @@ class DrawingToolbar extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<DrawingToolbar> createState() => _DrawingToolbarState();
+}
+
+class _DrawingToolbarState extends State<DrawingToolbar> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final appBarHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
@@ -52,12 +65,14 @@ class DrawingToolbar extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Scrollbar(
+          controller: _scrollController,
           thumbVisibility: true,
           thickness: 4,
           radius: Radius.circular(2),
           scrollbarOrientation: ScrollbarOrientation.right,
           child: SingleChildScrollView(
-            primary: false, // IMPORTANT: Prevent using PrimaryScrollController
+            controller: _scrollController,
+            primary: false,
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
               child: Column(
@@ -111,7 +126,7 @@ class DrawingToolbar extends StatelessWidget {
                     return Padding(
                       padding: EdgeInsets.symmetric(vertical: 4),
                       child: GestureDetector(
-                        onTap: () => onColorChanged(color),
+                        onTap: () => widget.onColorChanged(color),
                         child: Container(
                           width: 32,
                           height: 32,
@@ -119,12 +134,12 @@ class DrawingToolbar extends StatelessWidget {
                             color: color,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: selectedColor == color
+                              color: widget.selectedColor == color
                                   ? Colors.indigo
                                   : Colors.grey.shade300,
-                              width: selectedColor == color ? 3 : 1,
+                              width: widget.selectedColor == color ? 3 : 1,
                             ),
-                            boxShadow: selectedColor == color
+                            boxShadow: widget.selectedColor == color
                                 ? [
                               BoxShadow(
                                 color: color.withOpacity(0.4),
@@ -156,25 +171,25 @@ class DrawingToolbar extends StatelessWidget {
                   _buildActionButton(
                     icon: Icons.undo,
                     tooltip: 'Undo',
-                    onTap: onUndo,
+                    onTap: widget.onUndo,
                   ),
                   SizedBox(height: 6),
                   _buildActionButton(
                     icon: Icons.redo,
                     tooltip: 'Redo',
-                    onTap: onRedo,
+                    onTap: widget.onRedo,
                   ),
                   SizedBox(height: 6),
                   _buildActionButton(
                     icon: Icons.delete,
                     tooltip: 'Clear',
-                    onTap: onClear,
+                    onTap: widget.onClear,
                   ),
                   SizedBox(height: 6),
                   _buildActionButton(
                     icon: Icons.close,
                     tooltip: 'Close',
-                    onTap: onClose,
+                    onTap: widget.onClose,
                     isClose: true,
                   ),
                   SizedBox(height: 8),
@@ -206,12 +221,12 @@ class DrawingToolbar extends StatelessWidget {
     required String label,
     required DrawingTool tool,
   }) {
-    final isSelected = selectedTool == tool;
+    final isSelected = widget.selectedTool == tool;
 
     return Tooltip(
       message: label,
       child: GestureDetector(
-        onTap: () => onToolChanged(tool),
+        onTap: () => widget.onToolChanged(tool),
         child: Container(
           width: 56,
           height: 48,
