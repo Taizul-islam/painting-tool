@@ -76,18 +76,71 @@ class SlideThumbnail extends StatelessWidget {
   Widget _buildThumbnailPreview() {
     switch (page.contentType) {
       case PageContentType.image:
-        return Image.file(
-          File(page.contentPath!),
-          fit: BoxFit.cover,
+        return Container(
+          color: Colors.grey.shade100,
+          child: Image.file(
+            File(page.contentPath!),
+            fit: BoxFit.contain,
+            cacheHeight: 300,
+            errorBuilder: (context, error, stackTrace) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.broken_image, color: Colors.red.shade300, size: 24),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Load Error',
+                      style: TextStyle(fontSize: 8, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              );
+            },
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+              if (wasSynchronouslyLoaded) return child;
+              if (frame == null) {
+                return const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return AnimatedOpacity(
+                opacity: 1.0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+                child: child,
+              );
+            },
+          ),
         );
       case PageContentType.pdf:
         return PdfDocumentViewBuilder.file(
           page.contentPath!,
+          loadingBuilder: (context) => const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
           builder: (context, document) {
-            if (document == null) return const Center(child: CircularProgressIndicator());
+            if (document == null) {
+              return const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
             return PdfPageView(
               document: document,
               pageNumber: (page.pdfPageIndex ?? 0) + 1,
+              maximumDpi: 100, // Sufficient for thumbnail
             );
           },
         );
@@ -108,14 +161,14 @@ class SlideThumbnail extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.slideshow, size: 30, color: Colors.orange.shade700),
+                Icon(Icons.slideshow, size: 24, color: Colors.orange.shade300),
                 const SizedBox(height: 4),
                 Text(
                   'Slide ${page.pageNumber}',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 8,
                     fontWeight: FontWeight.bold,
-                    color: Colors.orange.shade800,
+                    color: Colors.orange.shade400,
                   ),
                 ),
               ],

@@ -5,87 +5,89 @@ class StrokeWidthSlider extends StatelessWidget {
   final double strokeWidth;
   final Color selectedColor;
   final Function(double) onStrokeWidthChanged;
+  final double min;
+  final double max;
+  final String label;
 
   const StrokeWidthSlider({
     Key? key,
     required this.strokeWidth,
     required this.selectedColor,
     required this.onStrokeWidthChanged,
+    this.min = 1.0,
+    this.max = 15.0,
+    this.label = 'Stroke Width',
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 20,
-            offset: Offset(0, 5),
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Row(
-            children: [
-              // Small circle indicator
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: selectedColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              SizedBox(width: 8),
-              Text(
-                'Stroke Width',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              Spacer(),
-              // Width value
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${strokeWidth.toStringAsFixed(1)} px',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.indigo,
-                  ),
-                ),
-              ),
-            ],
+          // Icon and Label
+          Icon(
+            label.contains('Duster') ? Icons.auto_fix_high : Icons.edit,
+            size: 16,
+            color: label.contains('Duster') ? Colors.orange : selectedColor,
           ),
-          SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.circle, size: 8, color: Colors.grey.shade400),
-              Expanded(
-                child: Slider(
-                  value: strokeWidth,
-                  min: 1,
-                  max: 15,
-                  activeColor: Colors.indigo,
-                  inactiveColor: Colors.grey.shade200,
-                  onChanged: onStrokeWidthChanged,
-                ),
+          SizedBox(width: 12),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          SizedBox(width: 16),
+          // The Slider
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
               ),
-              Icon(Icons.circle, size: 24, color: Colors.grey.shade400),
-            ],
+              child: Slider(
+                value: strokeWidth,
+                min: min,
+                max: max,
+                activeColor: label.contains('Duster') ? Colors.orange.shade700 : Colors.indigo,
+                inactiveColor: Colors.grey.shade200,
+                onChanged: onStrokeWidthChanged,
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          // Width value
+          Container(
+            width: 60,
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${strokeWidth.toInt()} px',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: label.contains('Duster') ? Colors.orange.shade800 : Colors.indigo,
+              ),
+            ),
           ),
         ],
       ),

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart';
@@ -21,6 +20,8 @@ import '../widgets/stroke_width_slider.dart';
 import '../widgets/slide_thumbnail.dart';
 
 class PresentationScreen extends StatefulWidget {
+  const PresentationScreen({Key? key}) : super(key: key);
+
   @override
   _PresentationScreenState createState() => _PresentationScreenState();
 }
@@ -31,14 +32,16 @@ class _PresentationScreenState extends State<PresentationScreen>
   bool _isToolbarVisible = false;
   Color _selectedColor = Colors.red;
   double _strokeWidth = 4.0;
+  double _eraserWidth = 30.0;
   DrawingTool _selectedTool = DrawingTool.pen;
+  Offset? _hoverPosition;
 
   int _currentPageIndex = 0;
   List<PresentationPage> _pages = [];
   DrawingStroke? _currentStroke;
 
-  List<List<DrawingStroke>> _undoHistory = [];
-  List<List<DrawingStroke>> _redoHistory = [];
+  final List<List<DrawingStroke>> _undoHistory = [];
+  final List<List<DrawingStroke>> _redoHistory = [];
 
   late AnimationController _toolbarAnimationController;
   late Animation<Offset> _slideAnimation;
@@ -46,20 +49,19 @@ class _PresentationScreenState extends State<PresentationScreen>
 
   PdfDocument? _currentPdfDocument;
   bool _isLoadingDocument = false;
-  Uint8List? _cachedPptxBytes;
   double _pptxAspectRatio = 1.5;
 
   final ScrollController _sidebarScrollController = ScrollController();
-  final ScrollController _pptxScrollController = ScrollController();
-  final PdfViewerController _pdfController = PdfViewerController();
+  late PageController _pageController;
 
   // Darkening overlay opacity
   double _darkOverlayOpacity = 0.0;
-  static const double MAX_DARK_OVERLAY = 0.2; // 30% darker
+  static const double MAX_DARK_OVERLAY = 0.2; // 20% darker
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentPageIndex);
     _initializePages();
     _initToolbarAnimation();
   }
@@ -67,11 +69,11 @@ class _PresentationScreenState extends State<PresentationScreen>
   void _initToolbarAnimation() {
     _toolbarAnimationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 400),
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: Offset(-1.5, 0),
+      begin: const Offset(-1.5, 0),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _toolbarAnimationController,
@@ -127,7 +129,7 @@ class _PresentationScreenState extends State<PresentationScreen>
     _toolbarAnimationController.dispose();
     _currentPdfDocument?.dispose();
     _sidebarScrollController.dispose();
-    _pptxScrollController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -158,15 +160,15 @@ class _PresentationScreenState extends State<PresentationScreen>
         actions: [
           if (!_isDrawingMode) ...[
             IconButton(
-              icon: Icon(Icons.file_open, color: Colors.indigo),
+              icon: const Icon(Icons.file_open, color: Colors.indigo),
               onPressed: _pickDocument,
               tooltip: 'Load Document',
             ),
             Padding(
-              padding: EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.only(right: 8),
               child: ElevatedButton.icon(
-                icon: Icon(Icons.draw, size: 18),
-                label: Text('Annotate'),
+                icon: const Icon(Icons.draw, size: 18),
+                label: const Text('Annotate'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -174,7 +176,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 onPressed: _enableDrawingMode,
               ),
@@ -200,7 +202,7 @@ class _PresentationScreenState extends State<PresentationScreen>
               tooltip: 'Toggle Toolbar',
             ),
             IconButton(
-              icon: Icon(Icons.close, color: Colors.red),
+              icon: const Icon(Icons.close, color: Colors.red),
               onPressed: _disableDrawingMode,
               tooltip: 'Close Drawing',
             ),
@@ -216,63 +218,15 @@ class _PresentationScreenState extends State<PresentationScreen>
           Expanded(
             child: Stack(
               children: [
-                // Main PDF Viewer
+                // Main Document Viewer
                 Column(
                   children: [
                     Expanded(
-                      child: _buildPDFViewer(),
+                      child: _buildContentPage(),
                     ),
                     _buildBottomNavigation(),
                   ],
                 ),
-
-                // Dark overlay for better contrast
-                if (_isDrawingMode && _darkOverlayOpacity > 0)
-                  Positioned.fill(
-                    child: Container(
-                      margin: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            duration: Duration(milliseconds: 300),
-                            opacity: _darkOverlayOpacity,
-                            child: Container(
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Drawing overlay
-                if (_isDrawingMode)
-                  Positioned.fill(
-                    child: Container(
-                      margin: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.transparent,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: DrawingCanvas(
-                          strokes: _pages[_currentPageIndex].strokes,
-                          currentStroke: _currentStroke,
-                          selectedColor: _selectedColor,
-                          strokeWidth: _strokeWidth,
-                          selectedTool: _selectedTool,
-                          onStrokeStart: _startStroke,
-                          onStrokeUpdate: _updateStroke,
-                          onStrokeEnd: _endStroke,
-                        ),
-                      ),
-                    ),
-                  ),
 
                 // Animated Side Toolbar (without slider)
                 if (_isDrawingMode && _isToolbarVisible)
@@ -285,7 +239,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                       child: FadeTransition(
                         opacity: _fadeAnimation,
                         child: Padding(
-                          padding: EdgeInsets.only(left: 8, top: 8, bottom: 8),
+                          padding: const EdgeInsets.only(left: 8, top: 8, bottom: 8),
                           child: DrawingToolbar(
                             selectedColor: _selectedColor,
                             strokeWidth: _strokeWidth,
@@ -310,11 +264,67 @@ class _PresentationScreenState extends State<PresentationScreen>
                     right: 0,
                     bottom: 0,
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: StrokeWidthSlider(
-                        strokeWidth: _strokeWidth,
+                        strokeWidth: _selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth,
                         selectedColor: _selectedColor,
-                        onStrokeWidthChanged: (width) => setState(() => _strokeWidth = width),
+                        onStrokeWidthChanged: (width) => setState(() {
+                          if (_selectedTool == DrawingTool.eraser) {
+                            _eraserWidth = width;
+                          } else {
+                            _strokeWidth = width;
+                          }
+                        }),
+                        min: _selectedTool == DrawingTool.eraser ? 10.0 : 1.0,
+                        max: _selectedTool == DrawingTool.eraser ? 100.0 : 15.0,
+                        label: _selectedTool == DrawingTool.eraser ? 'Duster Size' : 'Stroke Width',
+                      ),
+                    ),
+                  ),
+
+                // Global Document Loading Overlay
+                if (_isLoadingDocument)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(strokeWidth: 3),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Processing Document...',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'This may take a moment',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -326,221 +336,205 @@ class _PresentationScreenState extends State<PresentationScreen>
     );
   }
 
-  Widget _buildPDFViewer() {
+  Widget _buildContentPage() {
+    if (_pages.isEmpty) return Container();
+
     return Container(
-      margin: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade400,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          children: [
-            // PDF Page background
-            Container(
-              color: Colors.white,
-              child: Column(
-                children: [
-                  Expanded(child: _buildContentPage()),
-                ],
-              ),
-            ),
-
-            // PDF overlay effects
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.02),
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.05),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Page shadow effect
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 30,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.1),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Page curl effect (right side)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: 15,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.08),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Loading indicator (simulated)
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _isLoadingDocument ? Icons.sync : Icons.cloud_done,
-                      size: 14,
-                      color: _isLoadingDocument ? Colors.orange : Colors.green,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      _isLoadingDocument ? 'Loading...' : 'Loaded',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+      color: Colors.grey.shade200,
+      child: PageView.builder(
+        controller: _pageController,
+        itemCount: _pages.length,
+        physics: _isDrawingMode ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+        onPageChanged: (index) {
+          setState(() {
+            _currentPageIndex = index;
+            _currentStroke = null;
+          });
+          _scrollToCurrentThumbnail();
+        },
+        itemBuilder: (context, index) {
+          return _buildSlideItem(index);
+        },
       ),
     );
   }
 
-  Widget _buildContentPage() {
-    if (_pages.isEmpty) return Container();
-    final page = _pages[_currentPageIndex];
-
-    switch (page.contentType) {
-      case PageContentType.image:
-        return Center(
-          child: Image.file(
-            File(page.contentPath!),
-            fit: BoxFit.contain,
+  Widget _buildSlideItem(int index) {
+    final page = _pages[index];
+    
+    return InteractiveViewer(
+      minScale: 1.0,
+      maxScale: 4.0,
+      panEnabled: !_isDrawingMode,
+      scaleEnabled: !_isDrawingMode,
+      child: Stack(
+        children: [
+          // 1. Content
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _buildPageContent(page),
+            ),
           ),
-        );
-      case PageContentType.pdf:
-        return PdfViewer.file(
-          page.contentPath!,
-          key: ValueKey('pdf_${page.contentPath}'),
-          controller: _pdfController,
-          params: PdfViewerParams(
-            panEnabled: false,
-            scaleEnabled: false,
-            onViewerReady: (document, controller) {
-              // Jump to current page when viewer is first ready
-              controller.goToPage(pageNumber: _currentPageIndex + 1);
-            },
-          ),
-        );
-      case PageContentType.pptx:
-        return Container(
-          color: Colors.grey.shade200,
-          child: Scrollbar(
-            controller: _pptxScrollController,
-            thumbVisibility: true,
-            child: ListView.builder(
-              controller: _pptxScrollController,
-              itemCount: _pages.length,
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-              itemBuilder: (context, index) {
-                final page = _pages[index];
-                if (page.contentType != PageContentType.pptx || page.extraData == null) {
-                  return Container();
-                }
-
-                return Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 40),
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: AspectRatio(
-                      aspectRatio: _pptxAspectRatio,
-                      child: PptxSlideRenderer(
-                        params: page.extraData as GetSlideParam,
+  
+          // 2. Darkening overlay for better contrast
+          if (_isDrawingMode && _darkOverlayOpacity > 0 && _currentPageIndex == index)
+            Positioned.fill(
+              child: Container(
+                margin: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 300),
+                      opacity: _darkOverlayOpacity,
+                      child: Container(
+                        color: Colors.black,
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+              ),
+            ),
+  
+          // 3. Drawing overlay (Always show strokes, but only current page is interactive)
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.transparent,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: IgnorePointer(
+                  ignoring: !_isDrawingMode || _currentPageIndex != index,
+                  child: DrawingCanvas(
+                    strokes: page.strokes,
+                    currentStroke: _currentPageIndex == index ? _currentStroke : null,
+                    selectedColor: _selectedColor,
+                    strokeWidth: _strokeWidth,
+                    eraserWidth: _eraserWidth,
+                    selectedTool: _selectedTool,
+                    hoverPosition: _currentPageIndex == index ? _hoverPosition : null,
+                    onStrokeStart: _startStroke,
+                    onStrokeUpdate: _updateStroke,
+                    onStrokeEnd: _endStroke,
+                    onHoverUpdate: (pos) => setState(() => _hoverPosition = pos),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageContent(PresentationPage page) {
+    switch (page.contentType) {
+      case PageContentType.pdf:
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade400,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: PdfPageView(
+              document: _currentPdfDocument,
+              pageNumber: (page.pdfPageIndex ?? 0) + 1,
+              backgroundColor: Colors.white,
+            ),
+          ),
+        );
+      case PageContentType.pptx:
+        if (page.extraData != null) {
+          return Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: AspectRatio(
+                aspectRatio: _pptxAspectRatio,
+                child: PptxSlideRenderer(
+                  params: page.extraData as GetSlideParam,
+                ),
+              ),
+            ),
+          );
+        }
+        return Container();
+      case PageContentType.image:
+        return Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 1000),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Image.file(
+              File(page.contentPath!),
+              fit: BoxFit.contain,
             ),
           ),
         );
       case PageContentType.placeholder:
       default:
-        return _buildPlaceholderPage();
+        return Container(
+           decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: _buildPlaceholderPage(page),
+        );
     }
   }
 
-  Widget _buildPlaceholderPage() {
-    final page = _pages[_currentPageIndex];
+  Widget _buildPlaceholderPage(PresentationPage page) {
 
     return Center(
       child: SingleChildScrollView(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Document header
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(color: Colors.grey.shade200, width: 2),
@@ -557,7 +551,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                         letterSpacing: 2,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Internal Document',
                       style: GoogleFonts.poppins(
@@ -569,7 +563,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                 ),
               ),
 
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
 
               // Main content area
               Container(
@@ -587,7 +581,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                   size: 35,
                 ),
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
 
               // Title
               Text(
@@ -599,7 +593,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                 ),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
 
               // Subtitle
               Text(
@@ -611,12 +605,12 @@ class _PresentationScreenState extends State<PresentationScreen>
                 textAlign: TextAlign.center,
               ),
 
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
 
               // Content placeholder
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(8),
@@ -625,17 +619,17 @@ class _PresentationScreenState extends State<PresentationScreen>
                 child: Column(
                   children: [
                     _buildContentLine(0.8),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     _buildContentLine(0.6),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     _buildContentLine(0.9),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     _buildContentLine(0.5),
                   ],
                 ),
               ),
 
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
 
               // Bullet points
               Row(
@@ -647,12 +641,12 @@ class _PresentationScreenState extends State<PresentationScreen>
                 ],
               ),
 
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
 
               // Footer
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(color: Colors.grey.shade200),
@@ -717,7 +711,7 @@ class _PresentationScreenState extends State<PresentationScreen>
             color: Colors.indigo,
           ),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           label,
           style: GoogleFonts.poppins(
@@ -732,17 +726,17 @@ class _PresentationScreenState extends State<PresentationScreen>
   Widget _buildBottomNavigation() {
     return Container(
       color: Colors.white,
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: Icon(Icons.chevron_left),
+            icon: const Icon(Icons.chevron_left),
             onPressed: _currentPageIndex > 0 ? _previousPage : null,
             tooltip: 'Previous Slide',
           ),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(15),
@@ -757,7 +751,7 @@ class _PresentationScreenState extends State<PresentationScreen>
             ),
           ),
           IconButton(
-            icon: Icon(Icons.chevron_right),
+            icon: const Icon(Icons.chevron_right),
             onPressed: _currentPageIndex < _pages.length - 1 ? _nextPage : null,
             tooltip: 'Next Slide',
           ),
@@ -821,7 +815,7 @@ class _PresentationScreenState extends State<PresentationScreen>
       _currentStroke = DrawingStroke(
         points: [position],
         color: _selectedColor,
-        width: _strokeWidth,
+        width: _selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth,
         tool: _selectedTool,
       );
     });
@@ -935,30 +929,12 @@ class _PresentationScreenState extends State<PresentationScreen>
     });
     _scrollToCurrentThumbnail();
 
-    // If PDF, use controller to jump
-    if (_pages[_currentPageIndex].contentType == PageContentType.pdf) {
-      if (_pdfController.isReady) {
-        _pdfController.goToPage(pageNumber: index + 1);
-      }
-    }
-    // If PPTX, attempt to scroll to the slide
-    else if (_pages[_currentPageIndex].contentType == PageContentType.pptx) {
-      _scrollToPptxSlide();
-    }
-  }
-
-  void _scrollToPptxSlide() {
-    if (_pptxScrollController.hasClients && _pages.isNotEmpty) {
-       final screenWidth = MediaQuery.of(context).size.width;
-       final mainStageWidth = (screenWidth - 180 - 60).clamp(100.0, 1000.0);
-       
-       final double estHeight = mainStageWidth / _pptxAspectRatio + 40; // 40 for bottom margin
-       
-       _pptxScrollController.animateTo(
-         (_currentPageIndex * estHeight),
-         duration: const Duration(milliseconds: 500),
-         curve: Curves.fastOutSlowIn,
-       );
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -992,12 +968,12 @@ class _PresentationScreenState extends State<PresentationScreen>
         content: Row(
           children: [
             Icon(icon, color: Colors.white, size: 20),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(message),
           ],
         ),
         backgroundColor: color,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1007,27 +983,33 @@ class _PresentationScreenState extends State<PresentationScreen>
   }
 
   Future<void> _pickDocument() async {
-    // In file_picker 12.0.0, pickFile() returns PlatformFile?
-    final PlatformFile? file = await FilePicker.pickFile(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'pptx'],
+      allowMultiple: true,
     );
 
-    if (file != null) {
-      final path = file.path!;
-      final extension = file.name.split('.').last.toLowerCase();
+    if (result != null && result.isNotEmpty) {
+      final List<String> paths = result.map((f) => f.path!).toList();
+      
+      // Check for PDF or PPTX first (prioritize documents over multiple images)
+      final String? pdfPath = paths.any((p) => p.toLowerCase().endsWith('.pdf')) 
+          ? paths.firstWhere((p) => p.toLowerCase().endsWith('.pdf')) : null;
+      final String? pptxPath = paths.any((p) => p.toLowerCase().endsWith('.pptx'))
+          ? paths.firstWhere((p) => p.toLowerCase().endsWith('.pptx')) : null;
 
       setState(() {
         _isLoadingDocument = true;
       });
 
       try {
-        if (extension == 'pdf') {
-          await _loadPdf(path);
-        } else if (extension == 'pptx') {
-          await _loadPptx(path);
+        if (pdfPath != null) {
+          await _loadPdf(pdfPath);
+        } else if (pptxPath != null) {
+          await _loadPptx(pptxPath);
         } else {
-          await _loadImage(path);
+          // If no documents, load all selected items as images
+          await _loadImages(paths);
         }
       } catch (e) {
         _showSnackBar('Error loading document: $e', Colors.red, Icons.error);
@@ -1043,8 +1025,7 @@ class _PresentationScreenState extends State<PresentationScreen>
     final document = await PdfDocument.openFile(path);
     _currentPdfDocument?.dispose();
     _currentPdfDocument = document;
-    _cachedPptxBytes = null;
-
+    
     final List<PresentationPage> newPages = [];
     for (int i = 0; i < document.pages.length; i++) {
       newPages.add(PresentationPage(
@@ -1065,30 +1046,41 @@ class _PresentationScreenState extends State<PresentationScreen>
       _redoHistory.clear();
     });
 
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(0);
+    }
+
     _showSnackBar('PDF loaded: ${document.pages.length} pages', Colors.green, Icons.check_circle);
   }
 
-  Future<void> _loadImage(String path) async {
-    _cachedPptxBytes = null;
-    final List<PresentationPage> newPages = [
-      PresentationPage(
-        pageNumber: 1,
-        title: 'Image Annotation',
+  Future<void> _loadImages(List<String> paths) async {
+    final List<PresentationPage> newPages = [];
+    
+    for (int i = 0; i < paths.length; i++) {
+      final path = paths[i];
+      newPages.add(PresentationPage(
+        pageNumber: i + 1,
+        title: 'Image ${i + 1}',
         subtitle: 'From: ${path.split(Platform.pathSeparator).last}',
         icon: Icons.image,
         contentType: PageContentType.image,
         contentPath: path,
-      )
-    ];
+      ));
+    }
 
     setState(() {
       _pages = newPages;
+      _pptxAspectRatio = 1.5; // Standard aspect ratio for image list layout
       _currentPageIndex = 0;
       _undoHistory.clear();
       _redoHistory.clear();
     });
 
-    _showSnackBar('Image loaded successfully', Colors.green, Icons.image);
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(0);
+    }
+
+    _showSnackBar('Images loaded: ${paths.length}', Colors.green, Icons.image);
   }
 
   Future<void> _loadPptx(String path) async {
@@ -1098,7 +1090,6 @@ class _PresentationScreenState extends State<PresentationScreen>
 
     try {
       final bytes = File(path).readAsBytesSync();
-      _cachedPptxBytes = bytes;
 
       final appDir = await getApplicationSupportDirectory();
       final presentationDirPath = "${appDir.path}/presentation/";
@@ -1145,8 +1136,8 @@ class _PresentationScreenState extends State<PresentationScreen>
         _redoHistory.clear();
       });
 
-      if (_pptxScrollController.hasClients) {
-        _pptxScrollController.jumpTo(0);
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
       }
 
       _showSnackBar('PPTX loaded: ${newPages.length} slides', Colors.orange, Icons.slideshow);
@@ -1236,11 +1227,22 @@ class _PptxSlideRendererState extends State<PptxSlideRenderer> {
     }
 
     // We fetch slide details only when this widget is actually built (rendered on screen)
-    // Note: getSlideDetails is relatively fast if themes are already parsed
-    final slideDetailWidgets = PresentationProcessor.getSlideDetails(widget.params);
-    _cachedWidgets = slideDetailWidgets;
-
-    return _buildContent(slideDetailWidgets);
+    // Using FutureBuilder to show loading state if it takes time
+    return FutureBuilder<List<Widget>>(
+      future: Future.value(PresentationProcessor.getSlideDetails(widget.params)),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+        if (snapshot.hasData) {
+          _cachedWidgets = snapshot.data;
+          return _buildContent(_cachedWidgets!);
+        }
+        return const Center(child: Text("Error rendering slide"));
+      },
+    );
   }
 
   Widget _buildContent(List<Widget> slideDetailWidgets) {

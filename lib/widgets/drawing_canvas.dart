@@ -6,10 +6,13 @@ class DrawingCanvas extends StatefulWidget {
   final DrawingStroke? currentStroke;
   final Color selectedColor;
   final double strokeWidth;
+  final double eraserWidth;
   final DrawingTool selectedTool;
+  final Offset? hoverPosition;
   final Function(Offset) onStrokeStart;
   final Function(Offset) onStrokeUpdate;
   final Function() onStrokeEnd;
+  final Function(Offset?) onHoverUpdate;
 
   const DrawingCanvas({
     Key? key,
@@ -17,10 +20,13 @@ class DrawingCanvas extends StatefulWidget {
     required this.currentStroke,
     required this.selectedColor,
     required this.strokeWidth,
+    required this.eraserWidth,
     required this.selectedTool,
+    required this.hoverPosition,
     required this.onStrokeStart,
     required this.onStrokeUpdate,
     required this.onStrokeEnd,
+    required this.onHoverUpdate,
   }) : super(key: key);
 
   @override
@@ -32,37 +38,51 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (PointerDownEvent event) {
-        _isDrawing = true;
-        widget.onStrokeStart(event.localPosition);
-      },
-      onPointerMove: (PointerMoveEvent event) {
-        if (_isDrawing) {
-          widget.onStrokeUpdate(event.localPosition);
+    return MouseRegion(
+      onHover: (event) {
+        if (!_isDrawing) {
+          widget.onHoverUpdate(event.localPosition);
         }
       },
-      onPointerUp: (PointerUpEvent event) {
-        if (_isDrawing) {
-          _isDrawing = false;
-          widget.onStrokeEnd();
-        }
-      },
-      onPointerCancel: (PointerCancelEvent event) {
-        if (_isDrawing) {
-          _isDrawing = false;
-          widget.onStrokeEnd();
-        }
-      },
-      behavior: HitTestBehavior.opaque,
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: DrawingPainter(
-          strokes: widget.strokes,
-          currentStroke: widget.currentStroke,
-          color: widget.selectedColor,
-          strokeWidth: widget.strokeWidth,
-          tool: widget.selectedTool,
+      onExit: (_) => widget.onHoverUpdate(null),
+      child: Listener(
+        onPointerDown: (PointerDownEvent event) {
+          _isDrawing = true;
+          widget.onHoverUpdate(null); // Hide preview when drawing
+          widget.onStrokeStart(event.localPosition);
+        },
+        onPointerMove: (PointerMoveEvent event) {
+          if (_isDrawing) {
+            widget.onStrokeUpdate(event.localPosition);
+          } else {
+            widget.onHoverUpdate(event.localPosition);
+          }
+        },
+        onPointerUp: (PointerUpEvent event) {
+          if (_isDrawing) {
+            _isDrawing = false;
+            widget.onStrokeEnd();
+            widget.onHoverUpdate(event.localPosition);
+          }
+        },
+        onPointerCancel: (PointerCancelEvent event) {
+          if (_isDrawing) {
+            _isDrawing = false;
+            widget.onStrokeEnd();
+          }
+        },
+        behavior: HitTestBehavior.opaque,
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: DrawingPainter(
+            strokes: widget.strokes,
+            currentStroke: widget.currentStroke,
+            color: widget.selectedColor,
+            strokeWidth: widget.strokeWidth,
+            eraserWidth: widget.eraserWidth,
+            tool: widget.selectedTool,
+            hoverPosition: widget.hoverPosition,
+          ),
         ),
       ),
     );
@@ -74,18 +94,26 @@ class DrawingPainter extends CustomPainter {
   final DrawingStroke? currentStroke;
   final Color color;
   final double strokeWidth;
+  final double eraserWidth;
   final DrawingTool tool;
+  final Offset? hoverPosition;
 
   DrawingPainter({
     required this.strokes,
     required this.currentStroke,
     required this.color,
     required this.strokeWidth,
+    required this.eraserWidth,
     required this.tool,
+    required this.hoverPosition,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    // We use saveLayer so that BlendMode.clear only affects the ink layer, 
+    // revealing the document (PDF/PPTX) underneath.
+    canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+
     // Draw completed strokes
     for (var stroke in strokes) {
       _drawStroke(canvas, stroke);
@@ -95,20 +123,40 @@ class DrawingPainter extends CustomPainter {
     if (currentStroke != null && currentStroke!.points.length > 1) {
       _drawStroke(canvas, currentStroke!);
     }
+
+    canvas.restore();
+
+    // Draw Duster/Eraser preview outline
+    if (tool == DrawingTool.eraser && hoverPosition != null) {
+      final previewPaint = Paint()
+        ..color = Colors.indigo.withOpacity(0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      
+      canvas.drawCircle(hoverPosition!, eraserWidth / 2, previewPaint);
+      
+      // Draw a small center dot
+      canvas.drawCircle(hoverPosition!, 1.5, previewPaint..style = PaintingStyle.fill);
+    }
   }
 
   void _drawStroke(Canvas canvas, DrawingStroke stroke) {
     if (stroke.points.length < 2) return;
 
     final paint = Paint()
-      ..color = stroke.tool == DrawingTool.eraser
-          ? Colors.white
-          : stroke.color
+      ..color = stroke.color
       ..strokeWidth = stroke.width
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke
       ..isAntiAlias = true;
+
+    // True Eraser: Clear the pixels instead of painting white
+    if (stroke.tool == DrawingTool.eraser) {
+      paint.blendMode = BlendMode.clear;
+      // Eraser size is fixed during the stroke based on what was selected
+      // stroke.width will already be set to eraserWidth by the caller
+    }
 
     // Highlighter effect
     if (stroke.tool == DrawingTool.highlighter) {

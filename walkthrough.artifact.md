@@ -1,39 +1,23 @@
-# GitHub Release & Windows Configuration Walkthrough
+# Walkthrough: Loading Indicators for Smoother UX
 
-I have updated the project configuration to support professional Windows distribution and automatic GitHub releases.
+I have added comprehensive loading indicators throughout the app to provide clear visual feedback during document processing and preview rendering.
 
-## Deployment Instructions
+## Changes Made
 
-To generate your `.exe` file and upload it to GitHub, run these three commands in your terminal:
+### 1. Global Document Loading Overlay
+- **Feedback**: When you pick a new PDF or PPTX file, a central loading overlay now appears with the message "Processing Document...".
+- **Visuals**: Features a dimmed background and a white card with a `CircularProgressIndicator`, ensuring you know the app is working even during heavy background tasks like ZIP extraction or PDF parsing.
 
-```bash
-# 1. Commit and push your code
-git add .
-git commit -m "Optimize PPTX loading and prepare Windows release"
-git push origin main
+### 2. Sidebar Thumbnail Spinners
+- **Image Previews**: Added a small, centered spinner that appears while images are being decoded and loaded into memory.
+- **PDF Previews**: Integrated a loading state into the `PdfDocumentViewBuilder` so that each slide thumbnail shows a spinner while the PDF engine initializes.
+- **Polished Feel**: Thumbnails now fade in smoothly once the loading spinner disappears.
 
-# 2. Create a version tag (This triggers the .exe generation)
-git tag v1.0.0
+### 3. Asynchronous PPTX Slide Rendering
+- **On-Demand Loading**: Updated the `PptxSlideRenderer` to use a `FutureBuilder`.
+- **User Benefit**: Large PPTX slides that take time to build will now show a centered spinner instead of a blank screen, making the on-demand rendering feel intentional and responsive.
 
-# 3. Push the tag to GitHub
-git push origin v1.0.0
-```
-
----
-
-## What I Changed
-
-### 🏢 Professional Branding
-- **Executable Name**: Changed the binary from `mobile.exe` to `presentation_pro.exe`.
-- **Application Metadata**: Updated the internal file description, product name, and company name in the Windows resources. This makes the app look professional when viewed in the Windows Task Manager or File Explorer.
-
-### 🤖 Automatic Windows Build (CI/CD)
-- **Fixed Flutter Version**: Corrected the GitHub Action to use a stable and valid Flutter version (`3.24.2`).
-- **Automatic Releases**: Configured GitHub to automatically create a new "Release" whenever you push a tag starting with `v` (e.g., `v1.0.0`).
-- **ZIP Packaging**: The workflow now automatically packages all required `.dll` files and data folders into a single `.zip` file for your users to download.
-
-### ⚡ Performance Reminder
-- These changes include all the **PPTX Fast Loading** optimizations we worked on, ensuring the Windows app will be fast even with large presentations.
-
-> [!TIP]
-> After you run the `git push` commands above, you can go to the **Actions** tab on your GitHub repository to watch the Windows build progress!
+## How to Test
+1. **Pick a Large Document**: Tap the folder icon and select a large PDF or PPTX. You will see the global "Processing" card.
+2. **Scroll the Sidebar**: Quickly scroll through the slide list. You'll see small spinners appearing and disappearing as thumbnails load.
+3. **Navigate PPTX Slides**: When viewing a complex PPTX, notice the brief spinner that appears as the slide is rendered for the first time.

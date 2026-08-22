@@ -1,54 +1,32 @@
-# GitHub Upload and Windows EXE Generation
+# Add Loading Indicators for Document and Preview Rendering
 
-I will prepare the project for a professional Windows distribution by renaming the binary, fixing the GitHub Actions workflow, and providing instructions for the upload.
+Improve the user experience by providing visual feedback while documents and thumbnails are being rendered or loaded.
 
 ## User Review Required
 
-> [!IMPORTANT]
-> I am renaming the Windows binary from `mobile.exe` to `presentation_pro.exe`. I am also updating the GitHub workflow to use a valid Flutter version (`3.24.2`) and to automatically create a **GitHub Release** whenever you push a tag.
+> [!NOTE]
+> **Thumbnail Indicators**: A small, centered `CircularProgressIndicator` will be shown in the sidebar for each slide while its preview image (Image, PDF, or PPTX) is still being generated or decoded.
+
+> [!TIP]
+> **Main View Indicator**: When you select a large PDF or PPTX file to load, a centered loading overlay will appear to let you know the app is processing the document.
 
 ## Proposed Changes
 
-### Windows Configuration
-#### [MODIFY] [CMakeLists.txt](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile/windows/CMakeLists.txt)
-- Change `project(mobile LANGUAGES CXX)` to `project(presentation_pro LANGUAGES CXX)`.
-- Change `set(BINARY_NAME "mobile")` to `set(BINARY_NAME "presentation_pro")`.
+### [mobile](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile)
 
-#### [MODIFY] [Runner.rc](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile/windows/runner/Runner.rc)
-- Update `FileDescription`, `InternalName`, and `ProductName` to "Presentation Pro".
-- Update `OriginalFilename` to `presentation_pro.exe`.
+#### [MODIFY] [slide_thumbnail.dart](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile/lib/widgets/slide_thumbnail.dart)
 
-### GitHub Workflow
-#### [MODIFY] [build-windows.yml](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile/.github/workflows/build-windows.yml)
-- Update Flutter version to `3.24.2`.
-- Add a step to create a **GitHub Release** using `softprops/action-gh-release`.
-- Configure the release to trigger on tags (e.g., `v1.0.0`) or manually.
+- **Image Preview**: Update `frameBuilder` to show a `CircularProgressIndicator` while `frame` is null.
+- **PPTX Preview**: Add a loading state to `PptxSlideRenderer` or its wrapper in `SlideThumbnail` to show a spinner before the slide is ready.
+
+#### [MODIFY] [presentation_screen.dart](file:///Users/miurin/Desktop/painting_tool_co_rasel/mobile/lib/presentation_screen.dart)
+
+- **Global Loader**: In the `build` method of `_PresentationScreenState`, check the `_isLoadingDocument` flag. If true, show a centered `CircularProgressIndicator` overlay with a subtle dimmed background.
+- **PPTX Renderer**: Update `PptxSlideRenderer` to show a loading indicator if the slide details are still being processed (especially for the first render).
 
 ## Verification Plan
 
 ### Manual Verification
-1.  **Local Build Test**: If a Windows machine were available, we would run `flutter build windows`. (I will rely on the CI for this).
-2.  **Workflow Syntax**: Verify the `.yml` syntax is correct for GitHub Actions.
-
-## Deployment Instructions
-
-Once the changes are applied, follow these steps in your terminal:
-
-1.  **Commit everything**:
-    ```bash
-    git add .
-    git commit -m "Prepare for Windows release and optimize PPTX loading"
-    ```
-
-2.  **Push to GitHub**:
-    ```bash
-    git push origin main
-    ```
-
-3.  **Create a Release Tag** (to trigger the EXE generation):
-    ```bash
-    git tag v1.0.0
-    git push origin v1.0.0
-    ```
-
-The `.exe` will be available in the **Releases** section of your GitHub repository.
+1.  **Load a New Document**: Pick a multi-page PDF or a PPTX. Verify that a central loading indicator appears while the document is being processed.
+2.  **Sidebar Scrolling**: Scroll the sidebar quickly. Verify that new thumbnails show a small loading spinner before the preview image appears.
+3.  **PPTX Slides**: Navigate through PPTX slides. Verify that if a slide takes a moment to render, a spinner is visible.

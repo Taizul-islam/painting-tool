@@ -1,8 +1,6 @@
-- [x] Prepare Windows Release Configuration
-    - [x] Rename Windows binary in `CMakeLists.txt`
-    - [x] Update application metadata in `Runner.rc`
-    - [x] Fix Flutter version and add Release step in `build-windows.yml`
-- [ ] Push to GitHub
-    - [ ] Add and commit all changes
-    - [ ] Push to main branch
-    - [ ] Create and push version tag
+# Add Loading Indicators for Document and Preview Rendering
+
+- [x] Add global loading overlay to `PresentationScreen`
+- [x] Add loading indicators to `SlideThumbnail` previews
+- [x] Add loading state to `PptxSlideRenderer`
+- [x] Verify indicators during document pick and sidebar scroll
