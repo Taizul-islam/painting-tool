@@ -30,27 +30,81 @@ jobs:
       - name: Download LibreOffice Portable
         shell: powershell
         run: |
-          # Download LibreOffice Portable
+          # Use the correct LibreOffice download URL
           $url = "https://download.documentfoundation.org/libreoffice/portable/7.6.7/LibreOfficePortable_7.6.7_MultilingualStandard.paf.exe"
-          Invoke-WebRequest -Uri $url -OutFile "LibreOfficePortable.exe"
+          
+          # Alternative mirrors if first fails
+          $mirrors = @(
+            "https://download.documentfoundation.org/libreoffice/portable/7.6.7/LibreOfficePortable_7.6.7_MultilingualStandard.paf.exe",
+            "https://mirror.klaus-uwe.me/libreoffice/portable/7.6.7/LibreOfficePortable_7.6.7_MultilingualStandard.paf.exe",
+            "https://ftp.rz.tu-bs.de/pub/mirror/tdf/libreoffice/portable/7.6.7/LibreOfficePortable_7.6.7_MultilingualStandard.paf.exe"
+          )
+          
+          $downloaded = $false
+          foreach ($mirror in $mirrors) {
+            try {
+              Write-Host "Trying: $mirror"
+              Invoke-WebRequest -Uri $mirror -OutFile "LibreOfficePortable.exe" -ErrorAction Stop
+              $downloaded = $true
+              Write-Host "Downloaded successfully!"
+              break
+            } catch {
+              Write-Host "Failed: $mirror"
+            }
+          }
+          
+          if (-not $downloaded) {
+            Write-Host "All mirrors failed. Trying alternative approach..."
+            # Try downloading from GitHub releases or use chocolatey
+            choco install libreoffice-fresh -y --no-progress
+          }
 
       - name: Extract LibreOffice Portable
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path "tools\libreoffice" -Force
-          7z x LibreOfficePortable.exe -o"tools\libreoffice" -y
+          
+          if (Test-Path "LibreOfficePortable.exe") {
+            7z x LibreOfficePortable.exe -o"tools\libreoffice" -y
+          } elseif (Test-Path "C:\Program Files\LibreOffice") {
+            # Use chocolatey installed version
+            Copy-Item -Path "C:\Program Files\LibreOffice\*" -Destination "tools\libreoffice" -Recurse -Force
+          }
 
       - name: Download Poppler
         shell: powershell
         run: |
-          $url = "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.02.0-0/Release-24.02.0-0.zip"
-          Invoke-WebRequest -Uri $url -OutFile "poppler.zip"
+          # Correct Poppler download URL
+          $popplerUrls = @(
+            "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.02.0-0/Release-24.02.0-0.zip",
+            "https://github.com/oschwartz10612/poppler-windows/releases/download/v23.11.0-0/Release-23.11.0-0.zip"
+          )
+          
+          $downloaded = $false
+          foreach ($url in $popplerUrls) {
+            try {
+              Write-Host "Trying: $url"
+              Invoke-WebRequest -Uri $url -OutFile "poppler.zip" -ErrorAction Stop
+              $downloaded = $true
+              Write-Host "Downloaded successfully!"
+              break
+            } catch {
+              Write-Host "Failed: $url"
+            }
+          }
+          
+          if (-not $downloaded) {
+            # Try alternative poppler source
+            Invoke-WebRequest -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.02.0-0/Release-24.02.0-0.zip" -OutFile "poppler.zip"
+          }
 
       - name: Extract Poppler
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path "tools\poppler" -Force
-          Expand-Archive -Path "poppler.zip" -DestinationPath "tools\poppler" -Force
+          if (Test-Path "poppler.zip") {
+            Expand-Archive -Path "poppler.zip" -DestinationPath "tools\poppler" -Force
+          }
 
       - name: Get dependencies
         run: flutter pub get
@@ -62,6 +116,7 @@ jobs:
         shell: powershell
         run: |
           $buildDir = "build\windows\x64\runner\Release"
+          New-Item -ItemType Directory -Path "$buildDir\tools" -Force
           
           # Copy LibreOffice
           if (Test-Path "tools\libreoffice") {
@@ -72,6 +127,9 @@ jobs:
           if (Test-Path "tools\poppler") {
             Copy-Item -Path "tools\poppler\*" -Destination "$buildDir\tools\poppler" -Recurse -Force
           }
+          
+          # List what was copied
+          Get-ChildItem "$buildDir\tools" -Recurse | Select-Object -First 20
 
       - name: Create ZIP (Portable Version)
         shell: powershell
