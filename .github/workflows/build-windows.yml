@@ -52,46 +52,48 @@ jobs:
           Write-Host "Created tools directories"
 
       - name: Copy LibreOffice
-        shell: powershell
+        shell: cmd
         run: |
-          $source = "C:\Program Files\LibreOffice"
-          $destination = "build\windows\x64\runner\Release\tools\libreoffice"
-          
-          if (Test-Path $source) {
-            Write-Host "Copying LibreOffice from $source to $destination"
-            robocopy $source $destination /E /NFL /NDL /NJH /NJS /NC /NS /NP
-            Write-Host "LibreOffice copied successfully"
-          } else {
-            Write-Host "LibreOffice not found at $source"
-            # Check alternative location
-            $altSource = "C:\Program Files (x86)\LibreOffice"
-            if (Test-Path $altSource) {
-              Write-Host "Found at alternative location: $altSource"
-              robocopy $altSource $destination /E /NFL /NDL /NJH /NJS /NC /NS /NP
-            }
-          }
+          if exist "C:\Program Files\LibreOffice" (
+            echo Copying LibreOffice...
+            robocopy "C:\Program Files\LibreOffice" "build\windows\x64\runner\Release\tools\libreoffice" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+            if %ERRORLEVEL% LEQ 3 (
+              echo LibreOffice copied successfully
+              exit /b 0
+            ) else (
+              echo LibreOffice copy failed with error %ERRORLEVEL%
+              exit /b 1
+            )
+          ) else (
+            echo LibreOffice not found
+            exit /b 1
+          )
 
       - name: Copy Poppler
-        shell: powershell
+        shell: cmd
         run: |
-          $source = "C:\ProgramData\chocolatey\lib\poppler\tools"
-          $destination = "build\windows\x64\runner\Release\tools\poppler"
-          
-          if (Test-Path $source) {
-            Write-Host "Copying Poppler from $source to $destination"
-            robocopy $source $destination /E /NFL /NDL /NJH /NJS /NC /NS /NP
-            Write-Host "Poppler copied successfully"
-          } else {
-            Write-Host "Poppler not found at $source"
-            # Try to find pdftoppm
-            $pdftoppm = Get-ChildItem "C:\ProgramData\chocolatey" -Recurse -Filter "pdftoppm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($pdftoppm) {
-              $pdftoppmDir = $pdftoppm.DirectoryName
-              Write-Host "Found pdftoppm at: $pdftoppmDir"
-              New-Item -ItemType Directory -Path "$destination\bin" -Force
-              Copy-Item "$pdftoppmDir\*" "$destination\bin\" -Recurse -Force
-            }
-          }
+          if exist "C:\ProgramData\chocolatey\lib\poppler\tools" (
+            echo Copying Poppler...
+            robocopy "C:\ProgramData\chocolatey\lib\poppler\tools" "build\windows\x64\runner\Release\tools\poppler" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+            if %ERRORLEVEL% LEQ 3 (
+              echo Poppler copied successfully
+              exit /b 0
+            ) else (
+              echo Poppler copy failed with error %ERRORLEVEL%
+              exit /b 1
+            )
+          ) else (
+            echo Poppler not found at expected location
+            echo Trying to find pdftoppm...
+            for /r "C:\ProgramData\chocolatey" %%f in (pdftoppm.exe) do (
+              echo Found: %%f
+              mkdir "build\windows\x64\runner\Release\tools\poppler\bin" 2>nul
+              copy "%%~dpf*" "build\windows\x64\runner\Release\tools\poppler\bin\" /Y
+              exit /b 0
+            )
+            echo pdftoppm not found
+            exit /b 1
+          )
 
       - name: Verify tools
         shell: powershell
@@ -99,16 +101,12 @@ jobs:
           Write-Host "Verifying bundled tools..."
           $toolsDir = "build\windows\x64\runner\Release\tools"
           
-          if (Test-Path $toolsDir) {
-            Get-ChildItem $toolsDir -Recurse -Depth 2 | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
-          }
-          
           # Check for soffice.exe
           $soffice = Get-ChildItem $toolsDir -Recurse -Filter "soffice.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($soffice) {
             Write-Host "✅ Found soffice.exe at: $($soffice.FullName)"
           } else {
-            Write-Host "⚠️ soffice.exe not found in tools"
+            Write-Host "⚠️ soffice.exe not found"
           }
           
           # Check for pdftoppm.exe
@@ -116,7 +114,7 @@ jobs:
           if ($pdftoppm) {
             Write-Host "✅ Found pdftoppm.exe at: $($pdftoppm.FullName)"
           } else {
-            Write-Host "⚠️ pdftoppm.exe not found in tools"
+            Write-Host "⚠️ pdftoppm.exe not found"
           }
 
       - name: Create ZIP (Portable Version)
