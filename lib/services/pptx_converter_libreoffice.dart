@@ -324,38 +324,35 @@ class PptxConverterLibreOffice {
 
     print('Searching for pdftoppm in: ${executableDir.path}');
 
-    // Search recursively in tools directory
-    try {
-      final toolsDir = Directory('${executableDir.path}/tools');
-      if (toolsDir.existsSync()) {
-        print('Tools directory exists, searching recursively...');
-        final files = toolsDir.listSync(recursive: true);
-        for (final file in files) {
-          if (file is File && file.path.toLowerCase().endsWith('pdftoppm.exe')) {
-            print('✅ Found pdftoppm at: ${file.path}');
-            return file.path;
-          }
-        }
-        print('⚠️ pdftoppm not found in tools directory');
-      } else {
-        print('⚠️ Tools directory does not exist');
-      }
-    } catch (e) {
-      print('Error searching for pdftoppm: $e');
-    }
-
-    // Direct paths
-    final directPaths = [
+    // Known paths from GitHub Actions build
+    final knownPaths = [
+      '${executableDir.path}/tools/poppler/pdftoppm.exe',
       '${executableDir.path}/tools/poppler/bin/pdftoppm.exe',
       '${executableDir.path}/tools/poppler/Library/bin/pdftoppm.exe',
-      '${executableDir.path}/tools/poppler/pdftoppm.exe',
     ];
 
-    for (final path in directPaths) {
+    for (final path in knownPaths) {
       if (File(path).existsSync()) {
         print('✅ Found pdftoppm at: $path');
         return path;
       }
+    }
+
+    // Search recursively in tools directory
+    try {
+      final toolsDir = Directory('${executableDir.path}/tools');
+      if (toolsDir.existsSync()) {
+        print('Searching recursively in tools directory...');
+        final files = toolsDir.listSync(recursive: true);
+        for (final file in files) {
+          if (file is File && file.path.toLowerCase().endsWith('pdftoppm.exe')) {
+            print('✅ Found pdftoppm recursively at: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error searching for pdftoppm: $e');
     }
 
     // Development paths (macOS/Linux)
@@ -372,7 +369,7 @@ class PptxConverterLibreOffice {
       }
     }
 
-    // Try which/where command
+    // Try system commands
     try {
       final result = await Process.run('which', ['pdftoppm']);
       if (result.exitCode == 0) {
@@ -384,7 +381,6 @@ class PptxConverterLibreOffice {
       // Continue
     }
 
-    // Try where on Windows
     if (Platform.isWindows) {
       try {
         final result = await Process.run('where', ['pdftoppm']);
