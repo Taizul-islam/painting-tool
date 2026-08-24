@@ -1,0 +1,112 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: 'stable'
+          cache: true
+
+      - name: Enable Windows support
+        run: flutter config --enable-windows-desktop
+
+      - name: Download LibreOffice Portable
+        shell: powershell
+        run: |
+          # Download LibreOffice Portable
+          $url = "https://download.documentfoundation.org/libreoffice/portable/7.6.7/LibreOfficePortable_7.6.7_MultilingualStandard.paf.exe"
+          Invoke-WebRequest -Uri $url -OutFile "LibreOfficePortable.exe"
+
+      - name: Extract LibreOffice Portable
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path "tools\libreoffice" -Force
+          7z x LibreOfficePortable.exe -o"tools\libreoffice" -y
+
+      - name: Download Poppler
+        shell: powershell
+        run: |
+          $url = "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.02.0-0/Release-24.02.0-0.zip"
+          Invoke-WebRequest -Uri $url -OutFile "poppler.zip"
+
+      - name: Extract Poppler
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path "tools\poppler" -Force
+          Expand-Archive -Path "poppler.zip" -DestinationPath "tools\poppler" -Force
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows EXE
+        run: flutter build windows --release
+
+      - name: Copy Bundled Tools
+        shell: powershell
+        run: |
+          $buildDir = "build\windows\x64\runner\Release"
+          
+          # Copy LibreOffice
+          if (Test-Path "tools\libreoffice") {
+            Copy-Item -Path "tools\libreoffice\*" -Destination "$buildDir\tools\libreoffice" -Recurse -Force
+          }
+          
+          # Copy Poppler
+          if (Test-Path "tools\poppler") {
+            Copy-Item -Path "tools\poppler\*" -Destination "$buildDir\tools\poppler" -Recurse -Force
+          }
+
+      - name: Create ZIP (Portable Version)
+        shell: powershell
+        run: |
+          $zipName = "PresentationPro_Portable_v${{ github.ref_name }}.zip"
+          if ("${{ github.ref_type }}" -ne "tag") { 
+            $zipName = "PresentationPro_Portable_Manual.zip" 
+          }
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath $zipName
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: presentation-pro-portable
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          body: |
+            **Presentation Pro - Portable Version**
+            
+            Just extract the ZIP and run `mobile.exe` - no installation needed!
+            
+            **Features:**
+            - ✅ PPTX support with perfect rendering
+            - ✅ PDF viewing
+            - ✅ Drawing and annotation tools
+            - ✅ All tools bundled (LibreOffice + Poppler)
+            - ✅ No additional installation required
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
