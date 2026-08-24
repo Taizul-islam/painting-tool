@@ -49,6 +49,7 @@ jobs:
           $buildDir = "build\windows\x64\runner\Release"
           New-Item -ItemType Directory -Path "$buildDir\tools\libreoffice" -Force
           New-Item -ItemType Directory -Path "$buildDir\tools\poppler" -Force
+          New-Item -ItemType Directory -Path "$buildDir\tools\poppler\bin" -Force
           Write-Host "Created tools directories"
 
       - name: Copy LibreOffice
@@ -70,30 +71,65 @@ jobs:
           )
 
       - name: Copy Poppler
-        shell: cmd
+        shell: powershell
         run: |
-          if exist "C:\ProgramData\chocolatey\lib\poppler\tools" (
-            echo Copying Poppler...
-            robocopy "C:\ProgramData\chocolatey\lib\poppler\tools" "build\windows\x64\runner\Release\tools\poppler" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-            if %ERRORLEVEL% LEQ 3 (
-              echo Poppler copied successfully
-              exit /b 0
-            ) else (
-              echo Poppler copy failed with error %ERRORLEVEL%
-              exit /b 1
+          Write-Host "Finding pdftoppm.exe..."
+          
+          # Search for pdftoppm.exe in chocolatey installation
+          $pdftoppm = Get-ChildItem "C:\ProgramData\chocolatey" -Recurse -Filter "pdftoppm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          
+          if ($pdftoppm) {
+            Write-Host "Found pdftoppm.exe at: $($pdftoppm.FullName)"
+            $sourceDir = $pdftoppm.DirectoryName
+            $destDir = "build\windows\x64\runner\Release\tools\poppler\bin"
+          
+            Write-Host "Copying from: $sourceDir"
+            Write-Host "Copying to: $destDir"
+          
+            # Copy all files from the pdftoppm directory
+            Copy-Item -Path "$sourceDir\*" -Destination $destDir -Recurse -Force
+          
+            Write-Host "Poppler files copied"
+          
+            # Also copy DLLs if they exist in parent directory
+            $parentDir = Split-Path $sourceDir -Parent
+            $dllFiles = Get-ChildItem $parentDir -Filter "*.dll" -ErrorAction SilentlyContinue
+            if ($dllFiles) {
+              Write-Host "Copying DLL files..."
+              Copy-Item -Path "$parentDir\*.dll" -Destination $destDir -Force
+            }
+          
+            # Check if pdftoppm.exe exists in destination
+            if (Test-Path "$destDir\pdftoppm.exe") {
+              Write-Host "✅ pdftoppm.exe copied successfully"
+            } else {
+              Write-Host "⚠️ pdftoppm.exe not found in destination"
+              # Try to find it recursively
+              $found = Get-ChildItem "build\windows\x64\runner\Release\tools\poppler" -Recurse -Filter "pdftoppm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($found) {
+                Write-Host "✅ pdftoppm.exe found at: $($found.FullName)"
+              }
+            }
+          } else {
+            Write-Host "⚠️ pdftoppm.exe not found in chocolatey"
+            Write-Host "Trying to find in other locations..."
+          
+            # Check common locations
+            $locations = @(
+              "C:\Program Files\poppler",
+              "C:\Program Files (x86)\poppler",
+              "C:\poppler"
             )
-          ) else (
-            echo Poppler not found at expected location
-            echo Trying to find pdftoppm...
-            for /r "C:\ProgramData\chocolatey" %%f in (pdftoppm.exe) do (
-              echo Found: %%f
-              mkdir "build\windows\x64\runner\Release\tools\poppler\bin" 2>nul
-              copy "%%~dpf*" "build\windows\x64\runner\Release\tools\poppler\bin\" /Y
-              exit /b 0
-            )
-            echo pdftoppm not found
-            exit /b 1
-          )
+          
+            foreach ($loc in $locations) {
+              if (Test-Path $loc) {
+                Write-Host "Found poppler at: $loc"
+                Copy-Item -Path "$loc\*" -Destination "build\windows\x64\runner\Release\tools\poppler" -Recurse -Force
+                Write-Host "Poppler copied from $loc"
+                break
+              }
+            }
+          }
 
       - name: Verify tools
         shell: powershell
@@ -115,6 +151,8 @@ jobs:
             Write-Host "✅ Found pdftoppm.exe at: $($pdftoppm.FullName)"
           } else {
             Write-Host "⚠️ pdftoppm.exe not found"
+            Write-Host "Contents of poppler directory:"
+            Get-ChildItem "$toolsDir\poppler" -Recurse | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
           }
 
       - name: Create ZIP (Portable Version)

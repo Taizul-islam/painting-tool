@@ -297,19 +297,54 @@ class PptxConverterLibreOffice {
     return null;
   }
 
+  // static Future<String?> _findPdfToPpm() async {
+  //   // Check bundled location first
+  //   final executablePath = Platform.resolvedExecutable;
+  //   final executableDir = File(executablePath).parent;
+  //
+  //   final bundledPaths = [
+  //     // Windows: tools directory next to exe
+  //     '${executableDir.path}/tools/poppler/bin/pdftoppm.exe',
+  //     '${executableDir.path}/tools/poppler/Library/bin/pdftoppm.exe',
+  //     // Development paths
+  //     '/opt/homebrew/bin/pdftoppm',
+  //     '/usr/local/bin/pdftoppm',
+  //     '/usr/bin/pdftoppm',
+  //   ];
+  //
+  //   for (final path in bundledPaths) {
+  //     if (File(path).existsSync()) {
+  //       print('Found pdftoppm at: $path');
+  //       return path;
+  //     }
+  //   }
+  //
+  //   // Try which command
+  //   try {
+  //     final result = await Process.run('which', ['pdftoppm']);
+  //     if (result.exitCode == 0) {
+  //       final path = result.stdout.toString().trim();
+  //       print('Found pdftoppm via which: $path');
+  //       return path;
+  //     }
+  //   } catch (e) {
+  //     // Continue
+  //   }
+  //
+  //   return null;
+  // }
+
   static Future<String?> _findPdfToPpm() async {
     // Check bundled location first
     final executablePath = Platform.resolvedExecutable;
     final executableDir = File(executablePath).parent;
 
     final bundledPaths = [
-      // Windows: tools directory next to exe
+      // Windows: tools directory next to exe (multiple possible locations)
       '${executableDir.path}/tools/poppler/bin/pdftoppm.exe',
       '${executableDir.path}/tools/poppler/Library/bin/pdftoppm.exe',
-      // Development paths
-      '/opt/homebrew/bin/pdftoppm',
-      '/usr/local/bin/pdftoppm',
-      '/usr/bin/pdftoppm',
+      '${executableDir.path}/tools/poppler/pdftoppm.exe',
+      // Search in tools/poppler recursively
     ];
 
     for (final path in bundledPaths) {
@@ -319,12 +354,42 @@ class PptxConverterLibreOffice {
       }
     }
 
+    // Search recursively in tools/poppler
+    try {
+      final popplerDir = Directory('${executableDir.path}/tools/poppler');
+      if (popplerDir.existsSync()) {
+        final files = popplerDir.listSync(recursive: true);
+        for (final file in files) {
+          if (file is File && file.path.endsWith('pdftoppm.exe')) {
+            print('Found pdftoppm at: ${file.path}');
+            return file.path;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error searching for pdftoppm: $e');
+    }
+
+    // Development paths
+    final devPaths = [
+      '/opt/homebrew/bin/pdftoppm',
+      '/usr/local/bin/pdftoppm',
+      '/usr/bin/pdftoppm',
+    ];
+
+    for (final path in devPaths) {
+      if (File(path).existsSync()) {
+        print('Found pdftoppm at: $path');
+        return path;
+      }
+    }
+
     // Try which command
     try {
-      final result = await Process.run('which', ['pdftoppm']);
+      final result = await Process.run('where', ['pdftoppm']);
       if (result.exitCode == 0) {
-        final path = result.stdout.toString().trim();
-        print('Found pdftoppm via which: $path');
+        final path = result.stdout.toString().trim().split('\n').first;
+        print('Found pdftoppm via where: $path');
         return path;
       }
     } catch (e) {
