@@ -37,6 +37,7 @@ class PresentationPage {
   final String? contentPath;
   final int? pdfPageIndex;
   final dynamic extraData;
+  final Color? backgroundColor;
 
   PresentationPage({
     required this.pageNumber,
@@ -48,6 +49,7 @@ class PresentationPage {
     this.contentPath,
     this.pdfPageIndex,
     this.extraData,
+    this.backgroundColor = Colors.white,
   });
 
   PresentationPage copyWith({
@@ -56,6 +58,7 @@ class PresentationPage {
     String? contentPath,
     int? pdfPageIndex,
     dynamic extraData,
+    Color? backgroundColor,
   }) {
     return PresentationPage(
       pageNumber: pageNumber,
@@ -67,6 +70,7 @@ class PresentationPage {
       contentPath: contentPath ?? this.contentPath,
       pdfPageIndex: pdfPageIndex ?? this.pdfPageIndex,
       extraData: extraData ?? this.extraData,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
     );
   }
 }

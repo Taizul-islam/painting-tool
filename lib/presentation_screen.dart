@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,6 +13,7 @@ import '../widgets/drawing_toolbar.dart';
 import '../widgets/stroke_width_slider.dart';
 import '../widgets/slide_thumbnail.dart';
 import '../services/pptx_converter_libreoffice.dart';
+import '../services/export_service.dart';
 
 class PresentationScreen extends StatefulWidget {
   const PresentationScreen({Key? key}) : super(key: key);
@@ -88,35 +90,118 @@ class _PresentationScreenState extends State<PresentationScreen>
     _pages = [
       PresentationPage(
         pageNumber: 1,
-        title: 'Quarterly Business Review',
-        subtitle: 'Financial Performance & Growth Strategy',
-        icon: Icons.trending_up,
+        title: 'Blank Slide 1',
+        subtitle: 'Start writing or annotate',
+        icon: Icons.note_add,
+        contentType: PageContentType.image,
+        contentPath: null,
+        backgroundColor: Colors.white,
       ),
       PresentationPage(
         pageNumber: 2,
-        title: 'Market Analysis',
-        subtitle: 'Competitive Landscape & Market Trends',
-        icon: Icons.analytics,
+        title: 'Blank Slide 2',
+        subtitle: 'Start writing or annotate',
+        icon: Icons.note_add,
+        contentType: PageContentType.image,
+        contentPath: null,
+        backgroundColor: Colors.white,
       ),
       PresentationPage(
         pageNumber: 3,
-        title: 'Product Roadmap',
-        subtitle: 'Innovation & Development Timeline',
-        icon: Icons.rocket_launch,
-      ),
-      PresentationPage(
-        pageNumber: 4,
-        title: 'Customer Success',
-        subtitle: 'Case Studies & Testimonials',
-        icon: Icons.star,
-      ),
-      PresentationPage(
-        pageNumber: 5,
-        title: 'Strategic Initiatives',
-        subtitle: 'Key Priorities for Next Quarter',
-        icon: Icons.flag,
+        title: 'Blank Slide 3',
+        subtitle: 'Start writing or annotate',
+        icon: Icons.note_add,
+        contentType: PageContentType.image,
+        contentPath: null,
+        backgroundColor: Colors.white,
       ),
     ];
+  }
+
+  void _createNewPresentation() {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('New Presentation'),
+          content: Text('This will clear all current slides and create 3 new blank slides. Are you sure?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                setState(() {
+                  _isDrawingMode = false;
+                  _isToolbarVisible = false;
+                  _darkOverlayOpacity = 0.0;
+                  _currentStroke = null;
+                  _currentPageIndex = 0;
+                  _undoHistory.clear();
+                  _redoHistory.clear();
+                  _currentPdfDocument?.dispose();
+                  _currentPdfDocument = null;
+                  _initializePages();
+
+                  if (_pageController.hasClients) {
+                    _pageController.jumpToPage(0);
+                  }
+                });
+                _showSnackBar('New presentation created', Colors.teal, Icons.check_circle);
+              },
+              child: Text('Create New'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showNewPresentationDialog() {
+    Future.delayed(Duration(seconds: 1), () {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return AlertDialog(
+              title: Text('Export Successful'),
+              content: Text('Do you want to create a new presentation?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text('No, Continue'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    setState(() {
+                      _isDrawingMode = false;
+                      _isToolbarVisible = false;
+                      _darkOverlayOpacity = 0.0;
+                      _currentStroke = null;
+                      _currentPageIndex = 0;
+                      _undoHistory.clear();
+                      _redoHistory.clear();
+                      _currentPdfDocument?.dispose();
+                      _currentPdfDocument = null;
+                      _initializePages();
+
+                      if (_pageController.hasClients) {
+                        _pageController.jumpToPage(0);
+                      }
+                    });
+                    _showSnackBar('New presentation created', Colors.teal, Icons.check_circle);
+                  },
+                  child: Text('Yes, New Presentation'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    });
   }
 
   @override
@@ -155,9 +240,29 @@ class _PresentationScreenState extends State<PresentationScreen>
         actions: [
           if (!_isDrawingMode) ...[
             IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: Colors.teal),
+              onPressed: _createNewPresentation,
+              tooltip: 'New Presentation',
+            ),
+            IconButton(
               icon: const Icon(Icons.file_open, color: Colors.indigo),
               onPressed: _pickDocument,
               tooltip: 'Load Document',
+            ),
+            IconButton(
+              icon: const Icon(Icons.palette, color: Colors.purple),
+              onPressed: _showBackgroundColorPicker,
+              tooltip: 'Background Color',
+            ),
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.green),
+              onPressed: _exportAsPdf,
+              tooltip: 'Export as PDF',
+            ),
+            IconButton(
+              icon: const Icon(Icons.slideshow, color: Colors.orange),
+              onPressed: _exportAsPptx,
+              tooltip: 'Export as PPTX',
             ),
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -350,6 +455,7 @@ class _PresentationScreenState extends State<PresentationScreen>
 
   Widget _buildSlideItem(int index) {
     final page = _pages[index];
+    final isBlankSlide = page.contentPath == null || page.contentPath!.isEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -447,6 +553,71 @@ class _PresentationScreenState extends State<PresentationScreen>
           ),
         );
       case PageContentType.image:
+        if (page.contentPath == null || page.contentPath!.isEmpty) {
+          final bgColor = page.backgroundColor ?? Colors.white;
+
+          if (page.strokes.isNotEmpty || _isDrawingMode) {
+            return Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return Center(
+            child: Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.gesture,
+                      size: 64,
+                      color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade300 : Colors.white.withOpacity(0.5),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Blank Slide',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade400 : Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Click "Annotate" to start drawing',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade400 : Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         return Center(
           child: Container(
             decoration: BoxDecoration(
@@ -481,204 +652,70 @@ class _PresentationScreenState extends State<PresentationScreen>
         );
       case PageContentType.placeholder:
       default:
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: _buildPlaceholderPage(page),
-        );
-    }
-  }
+        final bgColor = page.backgroundColor ?? Colors.white;
 
-  Widget _buildPlaceholderPage(PresentationPage page) {
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade200, width: 2),
+        if (page.strokes.isNotEmpty || _isDrawingMode) {
+          return Center(
+            child: Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'COMPANY CONFIDENTIAL',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red.shade400,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Internal Document',
-                      style: GoogleFonts.poppins(
-                        fontSize: 8,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.indigo.shade400, Colors.indigo.shade600],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(
-                  page.icon,
-                  color: Colors.white,
-                  size: 35,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                page.title,
-                style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade800,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                page.subtitle,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  children: [
-                    _buildContentLine(0.8),
-                    const SizedBox(height: 8),
-                    _buildContentLine(0.6),
-                    const SizedBox(height: 8),
-                    _buildContentLine(0.9),
-                    const SizedBox(height: 8),
-                    _buildContentLine(0.5),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildBulletPoint('Revenue', '+25%'),
-                  _buildBulletPoint('Growth', '+15%'),
-                  _buildBulletPoint('Market', 'Top 3'),
                 ],
               ),
-              const SizedBox(height: 24),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: Colors.grey.shade200),
+            ),
+          );
+        }
+        return Center(
+          child: Container(
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.gesture,
+                    size: 64,
+                    color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade300 : Colors.white.withOpacity(0.5),
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Page ${page.pageNumber}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        color: Colors.grey.shade400,
-                      ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Blank Slide',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade400 : Colors.white.withOpacity(0.7),
                     ),
-                    Text(
-                      '© 2024 Company Name',
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        color: Colors.grey.shade400,
-                      ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Click "Annotate" to start drawing',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: bgColor.computeLuminance() > 0.5 ? Colors.grey.shade400 : Colors.white.withOpacity(0.7),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContentLine(double width) {
-    return Container(
-      width: double.infinity,
-      height: 8,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: width,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBulletPoint(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Colors.indigo,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 9,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
-    );
+        );
+    }
   }
 
   Widget _buildBottomNavigation() {
@@ -737,7 +774,7 @@ class _PresentationScreenState extends State<PresentationScreen>
     setState(() {
       _isDrawingMode = true;
       _isToolbarVisible = true;
-      _darkOverlayOpacity = MAX_DARK_OVERLAY;
+      _darkOverlayOpacity = 0.0;
       _undoHistory.clear();
       _redoHistory.clear();
     });
@@ -797,6 +834,8 @@ class _PresentationScreenState extends State<PresentationScreen>
           ..add(_currentStroke!);
         _pages[_currentPageIndex] = _pages[_currentPageIndex].copyWith(strokes: updatedStrokes);
         _currentStroke = null;
+
+        _pages = List.from(_pages);
       });
     } else {
       setState(() {
@@ -812,6 +851,7 @@ class _PresentationScreenState extends State<PresentationScreen>
         _pages[_currentPageIndex] = _pages[_currentPageIndex].copyWith(
           strokes: _undoHistory.removeLast(),
         );
+        _pages = List.from(_pages);
       });
     }
   }
@@ -823,6 +863,7 @@ class _PresentationScreenState extends State<PresentationScreen>
         _pages[_currentPageIndex] = _pages[_currentPageIndex].copyWith(
           strokes: _redoHistory.removeLast(),
         );
+        _pages = List.from(_pages);
       });
     }
   }
@@ -831,6 +872,7 @@ class _PresentationScreenState extends State<PresentationScreen>
     setState(() {
       _undoHistory.add(List.from(_pages[_currentPageIndex].strokes));
       _pages[_currentPageIndex] = _pages[_currentPageIndex].copyWith(strokes: []);
+      _pages = List.from(_pages);
     });
     _showSnackBar('Canvas cleared', Colors.orange, Icons.delete);
   }
@@ -859,6 +901,15 @@ class _PresentationScreenState extends State<PresentationScreen>
                     letterSpacing: 1,
                   ),
                 ),
+                Spacer(),
+                GestureDetector(
+                  onTap: _addNewSlide,
+                  child: Icon(
+                    Icons.add_circle,
+                    size: 18,
+                    color: Colors.indigo,
+                  ),
+                ),
               ],
             ),
           ),
@@ -878,6 +929,23 @@ class _PresentationScreenState extends State<PresentationScreen>
         ],
       ),
     );
+  }
+
+  void _addNewSlide() {
+    setState(() {
+      _pages.add(
+        PresentationPage(
+          pageNumber: _pages.length + 1,
+          title: 'Blank Slide ${_pages.length + 1}',
+          subtitle: 'Start writing or annotate',
+          icon: Icons.note_add,
+          contentType: PageContentType.image,
+          contentPath: null,
+          backgroundColor: Colors.white,
+        ),
+      );
+    });
+    _showSnackBar('New slide added', Colors.indigo, Icons.add_circle);
   }
 
   void _goToPage(int index) {
@@ -943,6 +1011,228 @@ class _PresentationScreenState extends State<PresentationScreen>
         ),
       ),
     );
+  }
+
+  void _showBackgroundColorPicker() {
+    final currentPage = _pages[_currentPageIndex];
+    final isBlankSlide = currentPage.contentPath == null || currentPage.contentPath!.isEmpty;
+
+    if (!isBlankSlide) {
+      _showSnackBar('Background color only for blank slides', Colors.grey, Icons.info);
+      return;
+    }
+
+    Color selectedColor = currentPage.backgroundColor ?? Colors.white;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('Choose Background Color'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ColorPicker(
+                  pickerColor: selectedColor,
+                  onColorChanged: (color) {
+                    selectedColor = color;
+                  },
+                  showLabel: true,
+                  pickerAreaHeightPercent: 0.8,
+                  enableAlpha: false,
+                  displayThumbColor: true,
+                  paletteType: PaletteType.hsvWithHue,
+                  labelTypes: [
+                    ColorLabelType.rgb,
+                    ColorLabelType.hex,
+                    ColorLabelType.hsv,
+                  ],
+                  pickerAreaBorderRadius: BorderRadius.circular(8),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Quick Colors',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _buildQuickColor(Colors.white, 'White', dialogContext),
+                    _buildQuickColor(Colors.black, 'Black', dialogContext),
+                    _buildQuickColor(Color(0xFFFEEBEB), 'Light Red', dialogContext),
+                    _buildQuickColor(Color(0xFFE8F5E9), 'Light Green', dialogContext),
+                    _buildQuickColor(Color(0xFFE3F2FD), 'Light Blue', dialogContext),
+                    _buildQuickColor(Color(0xFFFFFDE7), 'Light Yellow', dialogContext),
+                    _buildQuickColor(Color(0xFFFFF3E0), 'Light Orange', dialogContext),
+                    _buildQuickColor(Color(0xFFF3E5F5), 'Light Purple', dialogContext),
+                    _buildQuickColor(Color(0xFFF5F5F5), 'Light Grey', dialogContext),
+                    _buildQuickColor(Color(0xFFE0F2F1), 'Light Teal', dialogContext),
+                    _buildQuickColor(Color(0xFFFCE4EC), 'Light Pink', dialogContext),
+                    _buildQuickColor(Color(0xFFE8EAF6), 'Light Indigo', dialogContext),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  final updatedPage = _pages[_currentPageIndex].copyWith(
+                    backgroundColor: selectedColor,
+                  );
+                  _pages[_currentPageIndex] = updatedPage;
+                  _pages = List.from(_pages);
+                });
+                Navigator.pop(dialogContext);
+                _showSnackBar('Background color changed', Colors.green, Icons.check_circle);
+              },
+              child: Text('Apply'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickColor(Color color, String label, BuildContext dialogContext) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(dialogContext);
+        setState(() {
+          final updatedPage = _pages[_currentPageIndex].copyWith(
+            backgroundColor: color,
+          );
+          _pages[_currentPageIndex] = updatedPage;
+          _pages = List.from(_pages);
+        });
+        _showSnackBar('Background color changed', Colors.green, Icons.check_circle);
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportAsPdf() async {
+    setState(() {
+      _isLoadingDocument = true;
+      _loadingProgress = 0.0;
+      _loadingMessage = 'Exporting as PDF...';
+    });
+
+    try {
+      final filePath = await ExportService.exportAsPdf(
+        _pages,
+        'Presentation_Export',
+      );
+
+      if (filePath != null) {
+        _showSnackBar(
+          'PDF exported',
+          Colors.green,
+          Icons.check_circle,
+        );
+        _showNewPresentationDialog();
+      } else {
+        _showSnackBar(
+          'Failed to export PDF',
+          Colors.red,
+          Icons.error,
+        );
+      }
+    } catch (e) {
+      print('Error exporting PDF: $e');
+      _showSnackBar(
+        'Error: $e',
+        Colors.red,
+        Icons.error,
+      );
+    } finally {
+      setState(() {
+        _isLoadingDocument = false;
+        _loadingProgress = 0.0;
+      });
+    }
+  }
+
+  Future<void> _exportAsPptx() async {
+    setState(() {
+      _isLoadingDocument = true;
+      _loadingProgress = 0.0;
+      _loadingMessage = 'Exporting as PPTX...';
+    });
+
+    try {
+      final filePath = await ExportService.exportAsPptx(
+        _pages,
+        'Presentation_Export',
+      );
+
+      if (filePath != null) {
+        _showSnackBar(
+          'PPTX exported',
+          Colors.green,
+          Icons.check_circle,
+        );
+        _showNewPresentationDialog();
+      } else {
+        _showSnackBar(
+          'Failed to export PPTX',
+          Colors.red,
+          Icons.error,
+        );
+      }
+    } catch (e) {
+      print('Error exporting PPTX: $e');
+      _showSnackBar(
+        'Error: $e',
+        Colors.red,
+        Icons.error,
+      );
+    } finally {
+      setState(() {
+        _isLoadingDocument = false;
+        _loadingProgress = 0.0;
+      });
+    }
   }
 
   Future<void> _pickDocument() async {
