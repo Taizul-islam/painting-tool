@@ -23,7 +23,6 @@ dependencies:
   archive:
   xml: ^6.5.0
   pdf: ^3.11.0
-  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_test:

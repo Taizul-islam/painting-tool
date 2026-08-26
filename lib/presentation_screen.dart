@@ -1,15 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/drawing_stroke.dart';
 import '../widgets/drawing_canvas.dart';
-import '../widgets/drawing_toolbar.dart';
 import '../widgets/stroke_width_slider.dart';
 import '../widgets/slide_thumbnail.dart';
 import '../services/pptx_converter_libreoffice.dart';
@@ -25,7 +22,7 @@ class PresentationScreen extends StatefulWidget {
 class _PresentationScreenState extends State<PresentationScreen>
     with SingleTickerProviderStateMixin {
   bool _isDrawingMode = false;
-  bool _isToolbarVisible = false;
+  bool _isToolbarVisible = true;
   Color _selectedColor = Colors.red;
   double _strokeWidth = 4.0;
   double _eraserWidth = 30.0;
@@ -70,7 +67,7 @@ class _PresentationScreenState extends State<PresentationScreen>
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(-1.5, 0),
+      begin: const Offset(0, -1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _toolbarAnimationController,
@@ -122,81 +119,207 @@ class _PresentationScreenState extends State<PresentationScreen>
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('New Presentation'),
-          content: Text('This will clear all current slides and create 3 new blank slides. Are you sure?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Cancel'),
+        return Dialog(
+          backgroundColor: Colors.white,
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 400,
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.add_circle_outline, color: Colors.teal, size: 30),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'New Presentation',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'This will clear all current slides and create 3 new blank slides.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    height: 1.5,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Are you sure?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Text('Cancel', style: TextStyle(fontSize: 13)),
+                    ),
+                    SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        setState(() {
+                          _isDrawingMode = false;
+                          _isToolbarVisible = false;
+                          _darkOverlayOpacity = 0.0;
+                          _currentStroke = null;
+                          _currentPageIndex = 0;
+                          _undoHistory.clear();
+                          _redoHistory.clear();
+                          _currentPdfDocument?.dispose();
+                          _currentPdfDocument = null;
+                          _initializePages();
+                          if (_pageController.hasClients) {
+                            _pageController.jumpToPage(0);
+                          }
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text('Create New', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                setState(() {
-                  _isDrawingMode = false;
-                  _isToolbarVisible = false;
-                  _darkOverlayOpacity = 0.0;
-                  _currentStroke = null;
-                  _currentPageIndex = 0;
-                  _undoHistory.clear();
-                  _redoHistory.clear();
-                  _currentPdfDocument?.dispose();
-                  _currentPdfDocument = null;
-                  _initializePages();
-
-                  if (_pageController.hasClients) {
-                    _pageController.jumpToPage(0);
-                  }
-                });
-                _showSnackBar('New presentation created', Colors.teal, Icons.check_circle);
-              },
-              child: Text('Create New'),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
   void _showNewPresentationDialog() {
-    Future.delayed(Duration(seconds: 1), () {
+    Future.delayed(Duration(milliseconds: 800), () {
       if (mounted) {
         showDialog(
           context: context,
           builder: (BuildContext dialogContext) {
-            return AlertDialog(
-              title: Text('Export Successful'),
-              content: Text('Do you want to create a new presentation?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: Text('No, Continue'),
+            return Dialog(
+              backgroundColor: Colors.white,
+              elevation: 10,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                width: 400,
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.check_circle, color: Colors.green, size: 30),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Export Successful',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Do you want to create a new presentation?',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                    SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          ),
+                          child: Text('No, Continue', style: TextStyle(fontSize: 13)),
+                        ),
+                        SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            setState(() {
+                              _isDrawingMode = false;
+                              _isToolbarVisible = false;
+                              _darkOverlayOpacity = 0.0;
+                              _currentStroke = null;
+                              _currentPageIndex = 0;
+                              _undoHistory.clear();
+                              _redoHistory.clear();
+                              _currentPdfDocument?.dispose();
+                              _currentPdfDocument = null;
+                              _initializePages();
+                              if (_pageController.hasClients) {
+                                _pageController.jumpToPage(0);
+                              }
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text('Yes, New', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    setState(() {
-                      _isDrawingMode = false;
-                      _isToolbarVisible = false;
-                      _darkOverlayOpacity = 0.0;
-                      _currentStroke = null;
-                      _currentPageIndex = 0;
-                      _undoHistory.clear();
-                      _redoHistory.clear();
-                      _currentPdfDocument?.dispose();
-                      _currentPdfDocument = null;
-                      _initializePages();
-
-                      if (_pageController.hasClients) {
-                        _pageController.jumpToPage(0);
-                      }
-                    });
-                    _showSnackBar('New presentation created', Colors.teal, Icons.check_circle);
-                  },
-                  child: Text('Yes, New Presentation'),
-                ),
-              ],
+              ),
             );
           },
         );
@@ -316,46 +439,127 @@ class _PresentationScreenState extends State<PresentationScreen>
               children: [
                 Column(
                   children: [
+                    // Horizontal Drawing Toolbar
+                    // Horizontal Drawing Toolbar
+                    if (_isDrawingMode && _isToolbarVisible)
+                      Container(
+                        height: 56,
+                        color: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        child: Row(
+                          children: [
+                            // Tools group
+                            Container(
+                              padding: EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                children: [
+                                  _buildCompactToolButton(Icons.edit, 'Pen', DrawingTool.pen, Colors.indigo),
+                                  SizedBox(width: 4),
+                                  _buildCompactToolButton(Icons.border_color, 'Highlight', DrawingTool.highlighter, Colors.orange),
+                                  SizedBox(width: 4),
+                                  _buildCompactToolButton(Icons.auto_fix_high, 'Eraser', DrawingTool.eraser, Colors.red),
+                                ],
+                              ),
+                            ),
+
+                            SizedBox(width: 16),
+
+                            // Color picker button
+                            GestureDetector(
+                              onTap: _showDrawingColorPicker,
+                              child: Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        color: _selectedColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.15),
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(width: 6),
+                                    Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade600),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            SizedBox(width: 16),
+
+                            // Stroke width indicator
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.line_weight, size: 16, color: Colors.grey.shade600),
+                                  SizedBox(width: 6),
+                                  Container(
+                                    width: 30,
+                                    height: _selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth,
+                                    decoration: BoxDecoration(
+                                      color: _selectedColor,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            Spacer(),
+
+                            // Actions
+                            _buildCompactActionButton(Icons.undo, 'Undo', _undo),
+                            SizedBox(width: 4),
+                            _buildCompactActionButton(Icons.redo, 'Redo', _redo),
+                            SizedBox(width: 4),
+                            _buildCompactActionButton(Icons.delete_outline, 'Clear', _clearStrokes),
+                            SizedBox(width: 12),
+                            Container(width: 1, height: 30, color: Colors.grey.shade200),
+                            SizedBox(width: 12),
+                            _buildCompactActionButton(Icons.close, 'Close', _disableDrawingMode, isClose: true),
+                          ],
+                        ),
+                      ),
+
                     Expanded(
                       child: _buildContentPage(),
                     ),
                     _buildBottomNavigation(),
                   ],
                 ),
-                if (_isDrawingMode && _isToolbarVisible)
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 120,
-                    child: SlideTransition(
-                      position: _slideAnimation,
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8, top: 8, bottom: 8),
-                          child: DrawingToolbar(
-                            selectedColor: _selectedColor,
-                            strokeWidth: _strokeWidth,
-                            selectedTool: _selectedTool,
-                            onColorChanged: (color) => setState(() => _selectedColor = color),
-                            onStrokeWidthChanged: (width) => setState(() => _strokeWidth = width),
-                            onToolChanged: (tool) => setState(() => _selectedTool = tool),
-                            onUndo: _undo,
-                            onRedo: _redo,
-                            onClear: _clearStrokes,
-                            onClose: _disableDrawingMode,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+
+                // Stroke Width Slider
                 if (_isDrawingMode && _isToolbarVisible)
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: 0,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    bottom: 60,
+                    child: Container(
+                      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                       child: StrokeWidthSlider(
                         strokeWidth: _selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth,
                         selectedColor: _selectedColor,
@@ -372,49 +576,92 @@ class _PresentationScreenState extends State<PresentationScreen>
                       ),
                     ),
                   ),
+
                 if (_isLoadingDocument)
                   Positioned.fill(
                     child: Container(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withOpacity(0.4),
                       child: Center(
                         child: Container(
-                          padding: const EdgeInsets.all(32),
+                          width: 380,
+                          padding: const EdgeInsets.all(30),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(18),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 35,
+                                offset: const Offset(0, 18),
                               ),
                             ],
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              CircularProgressIndicator(
-                                strokeWidth: 3,
-                                value: _loadingProgress > 0 ? _loadingProgress : null,
-                              ),
-                              const SizedBox(height: 20),
-                              Text(
-                                _loadingMessage,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade800,
+                              TweenAnimationBuilder(
+                                tween: Tween<double>(begin: 0.8, end: 1.0),
+                                duration: Duration(milliseconds: 800),
+                                builder: (context, scale, child) {
+                                  return Transform.scale(scale: scale, child: child);
+                                },
+                                child: Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Colors.indigo.shade400, Colors.indigo.shade600],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.indigo.withOpacity(0.3),
+                                        blurRadius: 15,
+                                        offset: Offset(0, 5),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    _loadingMessage.contains('PDF')
+                                        ? Icons.picture_as_pdf
+                                        : _loadingMessage.contains('PPTX')
+                                        ? Icons.slideshow
+                                        : Icons.description,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 24),
                               Text(
                                 _loadingProgress > 0
                                     ? '${(_loadingProgress * 100).toStringAsFixed(0)}%'
-                                    : 'This may take a moment',
+                                    : 'Processing...',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.indigo,
                                 ),
+                              ),
+                              SizedBox(height: 20),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value: _loadingProgress > 0 ? _loadingProgress : null,
+                                  minHeight: 10,
+                                  backgroundColor: Colors.grey.shade100,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.indigo),
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildProcessingStep(0, 'Reading', _loadingProgress),
+                                  _buildProcessingDot(),
+                                  _buildProcessingStep(1, 'Converting', _loadingProgress),
+                                  _buildProcessingDot(),
+                                  _buildProcessingStep(2, 'Finalizing', _loadingProgress),
+                                ],
                               ),
                             ],
                           ),
@@ -427,6 +674,403 @@ class _PresentationScreenState extends State<PresentationScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHorizontalToolButton(IconData icon, String label, DrawingTool tool, Color color) {
+    final isSelected = _selectedTool == tool;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTool = tool),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade200,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: isSelected ? color : Colors.grey.shade600),
+            SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? color : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactToolButton(IconData icon, String label, DrawingTool tool, Color color) {
+    final isSelected = _selectedTool == tool;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTool = tool),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: isSelected ? color : Colors.grey.shade500),
+            SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? color : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactActionButton(IconData icon, String label, VoidCallback onTap, {bool isClose = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isClose ? Colors.red.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isClose ? Colors.red.shade200 : Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isClose ? Colors.red : Colors.grey.shade600,
+            ),
+            SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: isClose ? Colors.red : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// Drawing color picker (same as background color picker)
+  void _showDrawingColorPicker() {
+    Color selectedColor = _selectedColor;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 380,
+            padding: EdgeInsets.all(16),
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.brush, color: Colors.indigo, size: 16),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Drawing Color',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, size: 16, color: Colors.grey.shade500),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: selectedColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '#${selectedColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                          style: TextStyle(
+                            color: selectedColor.computeLuminance() > 0.5
+                                ? Colors.black87
+                                : Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    _buildColorPalette(selectedColor, (color) {
+                      setDialogState(() => selectedColor = color);
+                    }),
+                    SizedBox(height: 12),
+                    _buildHueSlider(selectedColor, (color) {
+                      setDialogState(() => selectedColor = color);
+                    }),
+                    SizedBox(height: 12),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _buildQuickColorDotForDrawing(Colors.black, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.red, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.orange, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.yellow, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.green, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.blue, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.indigo, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.purple, dialogContext),
+                        _buildQuickColorDotForDrawing(Colors.white, dialogContext),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              side: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          ),
+                          child: Text('Cancel', style: TextStyle(fontSize: 11)),
+                        ),
+                        SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedColor = selectedColor;
+                            });
+                            Navigator.pop(dialogContext);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text('Apply', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickColorDotForDrawing(Color color, BuildContext dialogContext) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(dialogContext);
+        setState(() {
+          _selectedColor = color;
+        });
+      },
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey.shade300, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildHorizontalColorDot(Color color) {
+    final isSelected = _selectedColor == color;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedColor = color),
+      child: Container(
+        width: 28,
+        height: 28,
+        margin: EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? Colors.indigo : Colors.grey.shade300,
+            width: isSelected ? 2.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+            BoxShadow(
+              color: Colors.indigo.withOpacity(0.3),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ]
+              : null,
+        ),
+        child: isSelected
+            ? Icon(
+          Icons.check,
+          size: 14,
+          color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+        )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildHorizontalActionButton(IconData icon, String label, VoidCallback onTap, {bool isClose = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isClose ? Colors.red.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isClose ? Colors.red.shade200 : Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isClose ? Colors.red : Colors.grey.shade600,
+            ),
+            SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: isClose ? Colors.red : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessingStep(int stepIndex, String label, double progress) {
+    final stepProgress = (progress * 3) - stepIndex;
+    final isActive = stepProgress > 0;
+    final isCompleted = stepProgress > 1;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: isCompleted
+                ? Colors.green
+                : isActive
+                ? Colors.indigo
+                : Colors.grey.shade200,
+            shape: BoxShape.circle,
+          ),
+          child: isCompleted
+              ? Icon(Icons.check, size: 14, color: Colors.white)
+              : isActive
+              ? SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          )
+              : null,
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+            color: isActive ? Colors.indigo : Colors.grey.shade400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProcessingDot() {
+    return Container(
+      width: 20,
+      height: 2,
+      margin: EdgeInsets.only(bottom: 14),
+      color: Colors.grey.shade200,
     );
   }
 
@@ -485,9 +1129,7 @@ class _PresentationScreenState extends State<PresentationScreen>
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 300),
                           opacity: _darkOverlayOpacity,
-                          child: Container(
-                            color: Colors.black,
-                          ),
+                          child: Container(color: Colors.black),
                         ),
                       ),
                     ),
@@ -763,11 +1405,6 @@ class _PresentationScreenState extends State<PresentationScreen>
         _darkOverlayOpacity = MAX_DARK_OVERLAY;
       }
     });
-    _showSnackBar(
-      _darkOverlayOpacity > 0 ? 'Dark overlay enabled' : 'Dark overlay disabled',
-      _darkOverlayOpacity > 0 ? Colors.amber.shade700 : Colors.grey,
-      _darkOverlayOpacity > 0 ? Icons.brightness_low : Icons.brightness_high,
-    );
   }
 
   void _enableDrawingMode() {
@@ -779,7 +1416,6 @@ class _PresentationScreenState extends State<PresentationScreen>
       _redoHistory.clear();
     });
     _toolbarAnimationController.forward();
-    _showSnackBar('Drawing mode enabled', Colors.indigo, Icons.draw);
   }
 
   void _disableDrawingMode() {
@@ -791,7 +1427,6 @@ class _PresentationScreenState extends State<PresentationScreen>
         _currentStroke = null;
       });
     });
-    _showSnackBar('Drawing mode disabled', Colors.grey, Icons.close);
   }
 
   void _toggleToolbar() {
@@ -874,7 +1509,6 @@ class _PresentationScreenState extends State<PresentationScreen>
       _pages[_currentPageIndex] = _pages[_currentPageIndex].copyWith(strokes: []);
       _pages = List.from(_pages);
     });
-    _showSnackBar('Canvas cleared', Colors.orange, Icons.delete);
   }
 
   Widget _buildSidebar() {
@@ -945,7 +1579,6 @@ class _PresentationScreenState extends State<PresentationScreen>
         ),
       );
     });
-    _showSnackBar('New slide added', Colors.indigo, Icons.add_circle);
   }
 
   void _goToPage(int index) {
@@ -1027,86 +1660,297 @@ class _PresentationScreenState extends State<PresentationScreen>
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('Choose Background Color'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ColorPicker(
-                  pickerColor: selectedColor,
-                  onColorChanged: (color) {
-                    selectedColor = color;
-                  },
-                  showLabel: true,
-                  pickerAreaHeightPercent: 0.8,
-                  enableAlpha: false,
-                  displayThumbColor: true,
-                  paletteType: PaletteType.hsvWithHue,
-                  labelTypes: [
-                    ColorLabelType.rgb,
-                    ColorLabelType.hex,
-                    ColorLabelType.hsv,
-                  ],
-                  pickerAreaBorderRadius: BorderRadius.circular(8),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'Quick Colors',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+        return Dialog(
+          backgroundColor: Colors.white,
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 380,
+            padding: EdgeInsets.all(16),
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildQuickColor(Colors.white, 'White', dialogContext),
-                    _buildQuickColor(Colors.black, 'Black', dialogContext),
-                    _buildQuickColor(Color(0xFFFEEBEB), 'Light Red', dialogContext),
-                    _buildQuickColor(Color(0xFFE8F5E9), 'Light Green', dialogContext),
-                    _buildQuickColor(Color(0xFFE3F2FD), 'Light Blue', dialogContext),
-                    _buildQuickColor(Color(0xFFFFFDE7), 'Light Yellow', dialogContext),
-                    _buildQuickColor(Color(0xFFFFF3E0), 'Light Orange', dialogContext),
-                    _buildQuickColor(Color(0xFFF3E5F5), 'Light Purple', dialogContext),
-                    _buildQuickColor(Color(0xFFF5F5F5), 'Light Grey', dialogContext),
-                    _buildQuickColor(Color(0xFFE0F2F1), 'Light Teal', dialogContext),
-                    _buildQuickColor(Color(0xFFFCE4EC), 'Light Pink', dialogContext),
-                    _buildQuickColor(Color(0xFFE8EAF6), 'Light Indigo', dialogContext),
+                    Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.palette, color: Colors.purple, size: 16),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Background Color',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, size: 16, color: Colors.grey.shade500),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: selectedColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '#${selectedColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                          style: TextStyle(
+                            color: selectedColor.computeLuminance() > 0.5
+                                ? Colors.black87
+                                : Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    _buildColorPalette(selectedColor, (color) {
+                      setDialogState(() => selectedColor = color);
+                    }),
+                    SizedBox(height: 12),
+                    _buildHueSlider(selectedColor, (color) {
+                      setDialogState(() => selectedColor = color);
+                    }),
+                    SizedBox(height: 12),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _buildQuickColorDot(Colors.white, dialogContext),
+                        _buildQuickColorDot(Colors.black, dialogContext),
+                        _buildQuickColorDot(Color(0xFFFEEBEB), dialogContext),
+                        _buildQuickColorDot(Color(0xFFE8F5E9), dialogContext),
+                        _buildQuickColorDot(Color(0xFFE3F2FD), dialogContext),
+                        _buildQuickColorDot(Color(0xFFFFFDE7), dialogContext),
+                        _buildQuickColorDot(Color(0xFFFFF3E0), dialogContext),
+                        _buildQuickColorDot(Color(0xFFF3E5F5), dialogContext),
+                        _buildQuickColorDot(Color(0xFFF5F5F5), dialogContext),
+                        _buildQuickColorDot(Color(0xFFE0F2F1), dialogContext),
+                        _buildQuickColorDot(Color(0xFFFCE4EC), dialogContext),
+                        _buildQuickColorDot(Color(0xFFE8EAF6), dialogContext),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              side: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          ),
+                          child: Text('Cancel', style: TextStyle(fontSize: 11)),
+                        ),
+                        SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              final updatedPage = _pages[_currentPageIndex].copyWith(
+                                backgroundColor: selectedColor,
+                              );
+                              _pages[_currentPageIndex] = updatedPage;
+                              _pages = List.from(_pages);
+                            });
+                            Navigator.pop(dialogContext);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text('Apply', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
                   ],
-                ),
-              ],
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  final updatedPage = _pages[_currentPageIndex].copyWith(
-                    backgroundColor: selectedColor,
-                  );
-                  _pages[_currentPageIndex] = updatedPage;
-                  _pages = List.from(_pages);
-                });
-                Navigator.pop(dialogContext);
-                _showSnackBar('Background color changed', Colors.green, Icons.check_circle);
-              },
-              child: Text('Apply'),
-            ),
-          ],
         );
       },
     );
   }
 
-  Widget _buildQuickColor(Color color, String label, BuildContext dialogContext) {
+  Widget _buildColorPalette(Color currentColor, Function(Color) onColorChanged) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = 150.0;
+        final hsv = HSVColor.fromColor(currentColor);
+
+        return GestureDetector(
+          onTapDown: (details) {
+            final dx = (details.localPosition.dx / width).clamp(0.0, 1.0);
+            final dy = (details.localPosition.dy / height).clamp(0.0, 1.0);
+            final newColor = HSVColor.fromAHSV(1.0, hsv.hue, dx, 1.0 - dy).toColor();
+            onColorChanged(newColor);
+          },
+          onPanUpdate: (details) {
+            final dx = (details.localPosition.dx / width).clamp(0.0, 1.0);
+            final dy = (details.localPosition.dy / height).clamp(0.0, 1.0);
+            final newColor = HSVColor.fromAHSV(1.0, hsv.hue, dx, 1.0 - dy).toColor();
+            onColorChanged(newColor);
+          },
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: HSVColor.fromAHSV(1.0, hsv.hue, 1.0, 1.0).toColor(),
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Colors.white, Colors.transparent],
+                    ),
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: (hsv.saturation * width) - 8,
+                  top: ((1.0 - hsv.value) * height) - 8,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHueSlider(Color currentColor, Function(Color) onColorChanged) {
+    final currentHue = HSVColor.fromColor(currentColor).hue;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+
+        return GestureDetector(
+          onTapDown: (details) {
+            final hue = (details.localPosition.dx / width * 360).clamp(0.0, 360.0);
+            final hsv = HSVColor.fromColor(currentColor);
+            onColorChanged(HSVColor.fromAHSV(1.0, hue, hsv.saturation, hsv.value).toColor());
+          },
+          onPanUpdate: (details) {
+            final hue = (details.localPosition.dx / width * 360).clamp(0.0, 360.0);
+            final hsv = HSVColor.fromColor(currentColor);
+            onColorChanged(HSVColor.fromAHSV(1.0, hue, hsv.saturation, hsv.value).toColor());
+          },
+          child: Container(
+            height: 24,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [
+                  Colors.red,
+                  Colors.yellow,
+                  Colors.green,
+                  Colors.cyan,
+                  Colors.blue,
+                  Colors.purple,
+                  Colors.red,
+                ],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: (currentHue / 360 * width) - 8,
+                  top: 4,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickColorDot(Color color, BuildContext dialogContext) {
     return GestureDetector(
       onTap: () {
         Navigator.pop(dialogContext);
@@ -1117,36 +1961,22 @@ class _PresentationScreenState extends State<PresentationScreen>
           _pages[_currentPageIndex] = updatedPage;
           _pages = List.from(_pages);
         });
-        _showSnackBar('Background color changed', Colors.green, Icons.check_circle);
       },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                ),
-              ],
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey.shade300, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 3,
+              offset: Offset(0, 1),
             ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1165,26 +1995,14 @@ class _PresentationScreenState extends State<PresentationScreen>
       );
 
       if (filePath != null) {
-        _showSnackBar(
-          'PDF exported',
-          Colors.green,
-          Icons.check_circle,
-        );
+        _showSnackBar('PDF exported', Colors.green, Icons.check_circle);
         _showNewPresentationDialog();
       } else {
-        _showSnackBar(
-          'Failed to export PDF',
-          Colors.red,
-          Icons.error,
-        );
+        _showSnackBar('Failed to export PDF', Colors.red, Icons.error);
       }
     } catch (e) {
       print('Error exporting PDF: $e');
-      _showSnackBar(
-        'Error: $e',
-        Colors.red,
-        Icons.error,
-      );
+      _showSnackBar('Error: $e', Colors.red, Icons.error);
     } finally {
       setState(() {
         _isLoadingDocument = false;
@@ -1207,26 +2025,14 @@ class _PresentationScreenState extends State<PresentationScreen>
       );
 
       if (filePath != null) {
-        _showSnackBar(
-          'PPTX exported',
-          Colors.green,
-          Icons.check_circle,
-        );
+        _showSnackBar('PPTX exported', Colors.green, Icons.check_circle);
         _showNewPresentationDialog();
       } else {
-        _showSnackBar(
-          'Failed to export PPTX',
-          Colors.red,
-          Icons.error,
-        );
+        _showSnackBar('Failed to export PPTX', Colors.red, Icons.error);
       }
     } catch (e) {
       print('Error exporting PPTX: $e');
-      _showSnackBar(
-        'Error: $e',
-        Colors.red,
-        Icons.error,
-      );
+      _showSnackBar('Error: $e', Colors.red, Icons.error);
     } finally {
       setState(() {
         _isLoadingDocument = false;
@@ -1309,8 +2115,6 @@ class _PresentationScreenState extends State<PresentationScreen>
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
     }
-
-    _showSnackBar('PDF loaded: ${document.pages.length} pages', Colors.green, Icons.check_circle);
   }
 
   Future<void> _loadImages(List<String> paths) async {
@@ -1345,8 +2149,6 @@ class _PresentationScreenState extends State<PresentationScreen>
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
     }
-
-    _showSnackBar('Images loaded: ${paths.length}', Colors.green, Icons.image);
   }
 
   Future<void> _loadPptx(String path) async {
@@ -1398,22 +2200,12 @@ class _PresentationScreenState extends State<PresentationScreen>
       if (_pageController.hasClients) {
         _pageController.jumpToPage(0);
       }
-
-      _showSnackBar(
-        'PPTX loaded: ${newPages.length} slides',
-        Colors.orange,
-        Icons.slideshow,
-      );
     } catch (e) {
       print('Error loading PPTX: $e');
       setState(() {
         _loadingProgress = 1.0;
       });
-      _showSnackBar(
-        'Error: $e',
-        Colors.red,
-        Icons.error,
-      );
+      _showSnackBar('Error: $e', Colors.red, Icons.error);
     }
   }
 }

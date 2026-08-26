@@ -209,7 +209,7 @@ class SlideThumbnail extends StatelessWidget {
   }
 }
 
-// Custom painter for thumbnail drawings - only for blank slides
+// Custom painter for thumbnail drawings - handles eraser correctly
 class _ThumbnailPainter extends CustomPainter {
   final List<DrawingStroke> strokes;
 
@@ -222,16 +222,29 @@ class _ThumbnailPainter extends CustomPainter {
     // Scale factor to fit 100px height thumbnail
     final scaleFactor = size.height / 600; // Assuming slide height ~600px
 
+    // Save canvas state for eraser
+    canvas.saveLayer(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint(),
+    );
+
     for (final stroke in strokes) {
       if (stroke.points.length < 2) continue;
 
       final paint = Paint()
-        ..color = stroke.color
         ..strokeWidth = (stroke.width * scaleFactor).clamp(0.5, 5.0)
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke
         ..isAntiAlias = true;
+
+      // Handle eraser differently - use BlendMode.clear
+      if (stroke.tool == DrawingTool.eraser) {
+        paint.color = Colors.white;
+        paint.blendMode = BlendMode.clear;
+      } else {
+        paint.color = stroke.color;
+      }
 
       final path = Path();
       path.moveTo(
@@ -248,6 +261,8 @@ class _ThumbnailPainter extends CustomPainter {
 
       canvas.drawPath(path, paint);
     }
+
+    canvas.restore();
   }
 
   @override
