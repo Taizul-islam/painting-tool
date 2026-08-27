@@ -4,9 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 class PptxConverterLibreOffice {
-  static final Map<String, List<String>> _memoryCache = {};
-  static final Map<String, Future<List<String>>?> _loadingFutures = {};
-
   static Future<List<String>> convertPptxToImages(
       String pptxPath, {
         void Function(double progress)? onProgress,
@@ -22,122 +19,75 @@ class PptxConverterLibreOffice {
     final fileHash = _generateHash(pptxPath);
     final slideDir = Directory('${outputDir.path}/$fileHash');
 
-    onProgress?.call(0.1);
+    onProgress?.call(0.05);
 
-    // Check memory cache first
-    if (!forceRefresh && _memoryCache.containsKey(fileHash)) {
-      final cachedImages = _memoryCache[fileHash]!;
-      if (cachedImages.length > 1) {
-        print('⚡ Using memory cache: ${cachedImages.length} slides');
-        onProgress?.call(1.0);
-        return cachedImages;
-      }
-    }
-
-    // Check if already loading
-    if (_loadingFutures.containsKey(fileHash) && _loadingFutures[fileHash] != null) {
-      print('⏳ Already loading, waiting...');
-      return await _loadingFutures[fileHash]!;
-    }
-
-    // Check disk cache
-    if (!forceRefresh && slideDir.existsSync()) {
-      final images = slideDir.listSync()
-          .where((f) => f.path.endsWith('.png'))
-          .map((f) => f.path)
-          .toList()
-        ..sort((a, b) => _extractNumber(a).compareTo(_extractNumber(b)));
-
-      if (images.length > 1) {
-        print('💾 Using disk cache: ${images.length} slides');
-        _memoryCache[fileHash] = images;
-        onProgress?.call(1.0);
-        return images;
-      }
-    }
-
-    // Start conversion
-    final future = _performConversion(
-      pptxPath,
-      slideDir,
-      fileHash,
-      onProgress,
-    );
-
-    _loadingFutures[fileHash] = future;
+    print('🔄 Starting fresh conversion (cache disabled)...');
 
     try {
-      final result = await future;
-      _memoryCache[fileHash] = result;
-      return result;
-    } finally {
-      _loadingFutures[fileHash] = null;
+      // Clean old cache
+      if (slideDir.existsSync()) {
+        print('🗑️ Deleting old cache...');
+        slideDir.deleteSync(recursive: true);
+      }
+      slideDir.createSync(recursive: true);
+
+      onProgress?.call(0.1);
+
+      // Find bundled tools
+      final libreOfficePath = await _findLibreOffice();
+      final pdftoppmPath = await _findPdfToPpm();
+
+      if (libreOfficePath == null) {
+        throw Exception('LibreOffice not found. Please reinstall the application.');
+      }
+
+      if (pdftoppmPath == null) {
+        throw Exception('Poppler not found. Please reinstall the application.');
+      }
+
+      print('🔧 Tools found:');
+      print('   LibreOffice: $libreOfficePath');
+      print('   pdftoppm: $pdftoppmPath');
+
+      // Step 1: Convert PPTX to PDF
+      onProgress?.call(0.2);
+      final pdfPath = await _convertPptxToPdf(
+        pptxPath,
+        slideDir,
+        libreOfficePath,
+        onProgress,
+      );
+
+      if (pdfPath == null) {
+        throw Exception('Failed to convert PPTX to PDF');
+      }
+
+      onProgress?.call(0.5);
+
+      // Step 2: Convert PDF to PNG using pdftoppm
+      final images = await _convertPdfToImagesWithPoppler(
+        pdfPath,
+        slideDir,
+        pdftoppmPath,
+        onProgress,
+      );
+
+      // Clean up PDF
+      final pdfFile = File(pdfPath);
+      if (pdfFile.existsSync()) {
+        pdfFile.deleteSync();
+        print('🗑️ Deleted temporary PDF');
+      }
+
+      onProgress?.call(1.0);
+
+      print('✅ Successfully converted ${images.length} slides');
+      return images;
+    } catch (e) {
+      print('❌ Conversion failed: $e');
+      onProgress?.call(1.0);
+      rethrow;
     }
-  }
-
-  static Future<List<String>> _performConversion(
-      String pptxPath,
-      Directory slideDir,
-      String fileHash,
-      void Function(double)? onProgress,
-      ) async {
-    // Clean old cache
-    if (slideDir.existsSync()) {
-      slideDir.deleteSync(recursive: true);
-    }
-    slideDir.createSync(recursive: true);
-
-    onProgress?.call(0.2);
-
-    // Find bundled tools
-    final libreOfficePath = await _findLibreOffice();
-    final pdftoppmPath = await _findPdfToPpm();
-
-    if (libreOfficePath == null) {
-      throw Exception('LibreOffice not found. Please reinstall the application.');
-    }
-
-    if (pdftoppmPath == null) {
-      throw Exception('Poppler not found. Please reinstall the application.');
-    }
-
-    print('🔄 Converting PPTX...');
-    print('LibreOffice: $libreOfficePath');
-    print('pdftoppm: $pdftoppmPath');
-
-    // Step 1: Convert PPTX to PDF
-    final pdfPath = await _convertPptxToPdf(
-      pptxPath,
-      slideDir,
-      libreOfficePath,
-      onProgress,
-    );
-
-    if (pdfPath == null) {
-      throw Exception('Failed to convert PPTX to PDF');
-    }
-
-    onProgress?.call(0.5);
-
-    // Step 2: Convert PDF to PNG using bundled pdftoppm
-    final images = await _convertPdfToImagesWithPoppler(
-      pdfPath,
-      slideDir,
-      pdftoppmPath,
-      onProgress,
-    );
-
-    // Clean up PDF
-    final pdfFile = File(pdfPath);
-    if (pdfFile.existsSync()) {
-      pdfFile.deleteSync();
-    }
-
-    onProgress?.call(1.0);
-
-    print('✅ Total slides converted: ${images.length}');
-
-    return images;
   }
 
   static String _generateHash(String path) {
@@ -150,25 +100,18 @@ class PptxConverterLibreOffice {
     return hash.abs().toRadixString(16);
   }
 
-  static int _extractNumber(String path) {
-    final match = RegExp(r'(\d+)\.png$', caseSensitive: false).firstMatch(path);
-    if (match != null) {
-      return int.parse(match.group(1)!);
-    }
-    return 0;
-  }
-
   static Future<String?> _convertPptxToPdf(
       String pptxPath,
       Directory outputDir,
       String libreOfficePath,
       void Function(double)? onProgress,
       ) async {
-    onProgress?.call(0.3);
-
     print('📄 Converting PPTX to PDF...');
+    print('   Input: $pptxPath');
+    print('   Output: ${outputDir.path}');
 
-    final process = await Process.start(
+    // Use Process.run for better completion detection
+    final result = await Process.run(
       libreOfficePath,
       [
         '--headless',
@@ -178,14 +121,19 @@ class PptxConverterLibreOffice {
       ],
     );
 
-    final exitCode = await process.exitCode;
+    print('   Exit code: ${result.exitCode}');
+    print('   Stdout: ${result.stdout}');
+    if (result.stderr != null && result.stderr.toString().isNotEmpty) {
+      print('   Stderr: ${result.stderr}');
+    }
 
-    if (exitCode != 0) {
-      throw Exception('PPTX to PDF conversion failed');
+    if (result.exitCode != 0) {
+      throw Exception('PPTX to PDF conversion failed with exit code: ${result.exitCode}');
     }
 
     onProgress?.call(0.4);
 
+    // Wait a moment for PDF to be fully written
     await Future.delayed(Duration(seconds: 2));
 
     final pdfFiles = outputDir.listSync()
@@ -196,6 +144,7 @@ class PptxConverterLibreOffice {
       throw Exception('No PDF file generated');
     }
 
+    print('   PDF created: ${pdfFiles.first.path}');
     return pdfFiles.first.path;
   }
 
@@ -207,11 +156,12 @@ class PptxConverterLibreOffice {
       ) async {
     try {
       print('🖼️ Converting PDF to PNG...');
-      print('Using pdftoppm: $pdftoppmPath');
+      print('   Using pdftoppm: $pdftoppmPath');
+      print('   PDF: $pdfPath');
 
       final prefix = '${outputDir.path}/slide';
 
-      final process = await Process.start(
+      final result = await Process.run(
         pdftoppmPath,
         [
           '-png',
@@ -221,20 +171,31 @@ class PptxConverterLibreOffice {
         ],
       );
 
-      final exitCode = await process.exitCode;
+      print('   Exit code: ${result.exitCode}');
+      print('   Stdout: ${result.stdout}');
+      if (result.stderr != null && result.stderr.toString().isNotEmpty) {
+        print('   Stderr: ${result.stderr}');
+      }
 
-      if (exitCode != 0) {
-        throw Exception('pdftoppm conversion failed');
+      if (result.exitCode != 0) {
+        throw Exception('pdftoppm conversion failed with exit code: ${result.exitCode}');
       }
 
       onProgress?.call(0.7);
 
-      await Future.delayed(Duration(seconds: 1));
+      // Wait a moment for files to be written
+      await Future.delayed(Duration(milliseconds: 500));
 
-      final pngFiles = outputDir.listSync()
+      // Collect all PNG files
+      final allFiles = outputDir.listSync();
+      print('   Files in output: ${allFiles.length}');
+
+      final pngFiles = allFiles
           .where((f) => f.path.endsWith('.png') && f.path.contains('slide'))
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
+
+      print('   Found ${pngFiles.length} PNG files');
 
       if (pngFiles.isEmpty) {
         throw Exception('No PNG files generated');
@@ -245,7 +206,12 @@ class PptxConverterLibreOffice {
         final newPath = '${outputDir.path}/slide_${i + 1}.png';
 
         if (pngFiles[i].path != newPath) {
-          File(pngFiles[i].path).renameSync(newPath);
+          try {
+            File(pngFiles[i].path).renameSync(newPath);
+          } catch (e) {
+            print('   Error renaming, trying copy: $e');
+            File(pngFiles[i].path).copySync(newPath);
+          }
         }
 
         images.add(newPath);
@@ -253,25 +219,24 @@ class PptxConverterLibreOffice {
 
       onProgress?.call(0.9);
 
+      print('   Created ${images.length} images');
       return images;
     } catch (e) {
-      print('PDF to image conversion failed: $e');
-      throw Exception('Failed to convert PDF to images: $e');
+      print('❌ PDF to image conversion failed: $e');
+      rethrow;
     }
   }
 
   static Future<String?> _findLibreOffice() async {
-    // Check bundled location first (relative to executable)
     final executablePath = Platform.resolvedExecutable;
     final executableDir = File(executablePath).parent;
 
-    print('Executable directory: $executableDir');
+    print('🔍 Searching for LibreOffice...');
+    print('   Executable dir: $executableDir');
 
     final bundledPaths = [
-      // Windows: tools directory next to exe
       '${executableDir.path}/tools/libreoffice/program/soffice.exe',
       '${executableDir.path}/tools/LibreOffice/program/soffice.exe',
-      // macOS development paths
       '/opt/homebrew/bin/soffice',
       '/Applications/LibreOffice.app/Contents/MacOS/soffice',
       '/usr/local/bin/soffice',
@@ -285,7 +250,7 @@ class PptxConverterLibreOffice {
       }
     }
 
-    // Search recursively in tools directory for Windows
+    // Search recursively
     try {
       final toolsDir = Directory('${executableDir.path}/tools');
       if (toolsDir.existsSync()) {
@@ -298,13 +263,13 @@ class PptxConverterLibreOffice {
         }
       }
     } catch (e) {
-      print('Error searching for LibreOffice: $e');
+      print('Error searching: $e');
     }
 
     // Try which command
     try {
       final result = await Process.run('which', ['soffice']);
-      if (result.exitCode == 0) {
+      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
         final path = result.stdout.toString().trim();
         print('✅ Found soffice via which: $path');
         return path;
@@ -318,17 +283,18 @@ class PptxConverterLibreOffice {
   }
 
   static Future<String?> _findPdfToPpm() async {
-    // Check bundled location first
     final executablePath = Platform.resolvedExecutable;
     final executableDir = File(executablePath).parent;
 
-    print('Searching for pdftoppm in: ${executableDir.path}');
+    print('🔍 Searching for pdftoppm...');
 
-    // Known paths from GitHub Actions build
     final knownPaths = [
       '${executableDir.path}/tools/poppler/pdftoppm.exe',
       '${executableDir.path}/tools/poppler/bin/pdftoppm.exe',
       '${executableDir.path}/tools/poppler/Library/bin/pdftoppm.exe',
+      '/opt/homebrew/bin/pdftoppm',
+      '/usr/local/bin/pdftoppm',
+      '/usr/bin/pdftoppm',
     ];
 
     for (final path in knownPaths) {
@@ -338,11 +304,10 @@ class PptxConverterLibreOffice {
       }
     }
 
-    // Search recursively in tools directory
+    // Search recursively
     try {
       final toolsDir = Directory('${executableDir.path}/tools');
       if (toolsDir.existsSync()) {
-        print('Searching recursively in tools directory...');
         final files = toolsDir.listSync(recursive: true);
         for (final file in files) {
           if (file is File && file.path.toLowerCase().endsWith('pdftoppm.exe')) {
@@ -352,27 +317,13 @@ class PptxConverterLibreOffice {
         }
       }
     } catch (e) {
-      print('Error searching for pdftoppm: $e');
-    }
-
-    // Development paths (macOS/Linux)
-    final devPaths = [
-      '/opt/homebrew/bin/pdftoppm',
-      '/usr/local/bin/pdftoppm',
-      '/usr/bin/pdftoppm',
-    ];
-
-    for (final path in devPaths) {
-      if (File(path).existsSync()) {
-        print('✅ Found pdftoppm at: $path');
-        return path;
-      }
+      print('Error searching: $e');
     }
 
     // Try system commands
     try {
       final result = await Process.run('which', ['pdftoppm']);
-      if (result.exitCode == 0) {
+      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
         final path = result.stdout.toString().trim();
         print('✅ Found pdftoppm via which: $path');
         return path;
@@ -398,22 +349,18 @@ class PptxConverterLibreOffice {
     return null;
   }
 
-  // Preload PPTX in background
   static Future<void> preloadPptx(String pptxPath) async {
-    print('🔄 Preloading PPTX in background...');
+    print('🔄 Preloading PPTX...');
     await convertPptxToImages(pptxPath);
     print('✅ PPTX preloaded');
   }
 
-  // Clear all caches
   static void clearAllCaches() {
-    _memoryCache.clear();
-    _loadingFutures.clear();
-
     final tempDir = Directory.systemTemp;
     final cacheDir = Directory('${tempDir.path}/pptx_cache');
     if (cacheDir.existsSync()) {
       cacheDir.deleteSync(recursive: true);
+      print('🗑️ Cleared all caches');
     }
   }
 }

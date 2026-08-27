@@ -97,8 +97,7 @@ jobs:
                 Copy-Item -Path "$($binDir.FullName)\*" -Destination $destDir -Recurse -Force
                 Write-Host "✅ Poppler copied to $destDir"
               } else {
-                Write-Host "⚠️ bin directory not found"
-                # Copy everything
+                Write-Host "⚠️ bin directory not found, copying all..."
                 $destDir = "build\windows\x64\runner\Release\tools\poppler"
                 New-Item -ItemType Directory -Path $destDir -Force
                 Copy-Item -Path "$($popplerDir.FullName)\*" -Destination $destDir -Recurse -Force
@@ -108,18 +107,13 @@ jobs:
               Write-Host "⚠️ No directory found in poppler_extracted"
             }
           } else {
-            Write-Host "⚠️ poppler.zip not found"
-            Write-Host "Trying to find pdftoppm from chocolatey..."
-          
-            # Search for pdftoppm.exe
+            Write-Host "⚠️ poppler.zip not found, trying chocolatey..."
             $pdftoppm = Get-ChildItem "C:\ProgramData\chocolatey" -Recurse -Filter "pdftoppm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           
             if ($pdftoppm) {
               Write-Host "Found pdftoppm at: $($pdftoppm.FullName)"
               $destDir = "build\windows\x64\runner\Release\tools\poppler"
               New-Item -ItemType Directory -Path $destDir -Force
-          
-              # Copy the entire directory
               $sourceDir = $pdftoppm.DirectoryName
               Copy-Item -Path "$sourceDir\*" -Destination $destDir -Recurse -Force
               Write-Host "Copied from $sourceDir"
@@ -154,7 +148,15 @@ jobs:
               exit /b 1
             )
           ) else (
-            echo LibreOffice not found
+            echo LibreOffice not found at standard location
+            echo Trying alternative...
+            if exist "C:\Program Files (x86)\LibreOffice" (
+              robocopy "C:\Program Files (x86)\LibreOffice" "build\windows\x64\runner\Release\tools\libreoffice" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+              if %ERRORLEVEL% LEQ 3 (
+                echo LibreOffice copied successfully
+                exit /b 0
+              )
+            )
             exit /b 1
           )
 
@@ -170,6 +172,11 @@ jobs:
             Write-Host "✅ Found soffice.exe at: $($soffice.FullName)"
           } else {
             Write-Host "⚠️ soffice.exe not found"
+            Write-Host "Searching entire build directory..."
+            $soffice = Get-ChildItem "build\windows\x64\runner\Release" -Recurse -Filter "soffice.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($soffice) {
+              Write-Host "Found soffice.exe at: $($soffice.FullName)"
+            }
           }
           
           # Check for pdftoppm.exe
@@ -177,9 +184,12 @@ jobs:
           if ($pdftoppm) {
             Write-Host "✅ Found pdftoppm.exe at: $($pdftoppm.FullName)"
           } else {
-            Write-Host "⚠️ pdftoppm.exe not found"
-            Write-Host "Contents of tools directory:"
-            Get-ChildItem $toolsDir -Recurse -Depth 3 | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
+            Write-Host "⚠️ pdftoppm.exe not found in tools"
+            Write-Host "Searching entire build directory..."
+            $pdftoppm = Get-ChildItem "build\windows\x64\runner\Release" -Recurse -Filter "pdftoppm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($pdftoppm) {
+              Write-Host "Found pdftoppm.exe at: $($pdftoppm.FullName)"
+            }
           }
 
       - name: Create ZIP (Portable Version)

@@ -441,38 +441,76 @@ class _PresentationScreenState extends State<PresentationScreen>
                   children: [
                     // Horizontal Drawing Toolbar
                     // Horizontal Drawing Toolbar
+                    // Horizontal Drawing Toolbar
                     if (_isDrawingMode && _isToolbarVisible)
                       Container(
                         height: 56,
                         color: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        child: Row(
-                          children: [
-                            // Tools group
-                            Container(
-                              padding: EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(10),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Row(
+                            children: [
+                              // Tools group
+                              Container(
+                                padding: EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    _buildCompactToolButton(Icons.edit, 'Pen', DrawingTool.pen, Colors.indigo),
+                                    SizedBox(width: 4),
+                                    _buildCompactToolButton(Icons.border_color, 'Highlight', DrawingTool.highlighter, Colors.orange),
+                                    SizedBox(width: 4),
+                                    _buildCompactToolButton(Icons.auto_fix_high, 'Eraser', DrawingTool.eraser, Colors.red),
+                                  ],
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  _buildCompactToolButton(Icons.edit, 'Pen', DrawingTool.pen, Colors.indigo),
-                                  SizedBox(width: 4),
-                                  _buildCompactToolButton(Icons.border_color, 'Highlight', DrawingTool.highlighter, Colors.orange),
-                                  SizedBox(width: 4),
-                                  _buildCompactToolButton(Icons.auto_fix_high, 'Eraser', DrawingTool.eraser, Colors.red),
-                                ],
+
+                              SizedBox(width: 12),
+
+                              // Color picker button
+                              GestureDetector(
+                                onTap: _showDrawingColorPicker,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.grey.shade200),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 22,
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          color: _selectedColor,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.15),
+                                              blurRadius: 4,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.grey.shade600),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
 
-                            SizedBox(width: 16),
+                              SizedBox(width: 12),
 
-                            // Color picker button
-                            GestureDetector(
-                              onTap: _showDrawingColorPicker,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              // Stroke width indicator
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade50,
                                   borderRadius: BorderRadius.circular(10),
@@ -480,68 +518,34 @@ class _PresentationScreenState extends State<PresentationScreen>
                                 ),
                                 child: Row(
                                   children: [
+                                    Icon(Icons.line_weight, size: 14, color: Colors.grey.shade600),
+                                    SizedBox(width: 4),
                                     Container(
                                       width: 24,
-                                      height: 24,
+                                      height: (_selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth).clamp(2.0, 20.0),
                                       decoration: BoxDecoration(
                                         color: _selectedColor,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.15),
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                    SizedBox(width: 6),
-                                    Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade600),
                                   ],
                                 ),
                               ),
-                            ),
 
-                            SizedBox(width: 16),
+                              SizedBox(width: 12),
 
-                            // Stroke width indicator
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.grey.shade200),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.line_weight, size: 16, color: Colors.grey.shade600),
-                                  SizedBox(width: 6),
-                                  Container(
-                                    width: 30,
-                                    height: _selectedTool == DrawingTool.eraser ? _eraserWidth : _strokeWidth,
-                                    decoration: BoxDecoration(
-                                      color: _selectedColor,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            Spacer(),
-
-                            // Actions
-                            _buildCompactActionButton(Icons.undo, 'Undo', _undo),
-                            SizedBox(width: 4),
-                            _buildCompactActionButton(Icons.redo, 'Redo', _redo),
-                            SizedBox(width: 4),
-                            _buildCompactActionButton(Icons.delete_outline, 'Clear', _clearStrokes),
-                            SizedBox(width: 12),
-                            Container(width: 1, height: 30, color: Colors.grey.shade200),
-                            SizedBox(width: 12),
-                            _buildCompactActionButton(Icons.close, 'Close', _disableDrawingMode, isClose: true),
-                          ],
+                              // Actions
+                              _buildCompactActionButton(Icons.undo, 'Undo', _undo),
+                              SizedBox(width: 4),
+                              _buildCompactActionButton(Icons.redo, 'Redo', _redo),
+                              SizedBox(width: 4),
+                              _buildCompactActionButton(Icons.delete_outline, 'Clear', _clearStrokes),
+                              SizedBox(width: 8),
+                              Container(width: 1, height: 28, color: Colors.grey.shade200),
+                              SizedBox(width: 8),
+                              _buildCompactActionButton(Icons.close, 'Close', _disableDrawingMode, isClose: true),
+                            ],
+                          ),
                         ),
                       ),
 
@@ -677,54 +681,22 @@ class _PresentationScreenState extends State<PresentationScreen>
     );
   }
 
-  Widget _buildHorizontalToolButton(IconData icon, String label, DrawingTool tool, Color color) {
-    final isSelected = _selectedTool == tool;
-
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTool = tool),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? color : Colors.grey.shade200,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: isSelected ? color : Colors.grey.shade600),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                color: isSelected ? color : Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCompactToolButton(IconData icon, String label, DrawingTool tool, Color color) {
     final isSelected = _selectedTool == tool;
 
     return GestureDetector(
       onTap: () => setState(() => _selectedTool = tool),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isSelected ? color : Colors.grey.shade500),
-            SizedBox(width: 4),
+            Icon(icon, size: 14, color: isSelected ? color : Colors.grey.shade500),
+            SizedBox(width: 3),
             Text(
               label,
               style: GoogleFonts.poppins(
@@ -753,13 +725,14 @@ class _PresentationScreenState extends State<PresentationScreen>
           ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               size: 14,
               color: isClose ? Colors.red : Colors.grey.shade600,
             ),
-            SizedBox(width: 4),
+            SizedBox(width: 3),
             Text(
               label,
               style: GoogleFonts.poppins(
@@ -774,7 +747,8 @@ class _PresentationScreenState extends State<PresentationScreen>
     );
   }
 
-// Drawing color picker (same as background color picker)
+
+
   void _showDrawingColorPicker() {
     Color selectedColor = _selectedColor;
 
@@ -939,80 +913,6 @@ class _PresentationScreenState extends State<PresentationScreen>
               color: Colors.black.withOpacity(0.08),
               blurRadius: 3,
               offset: Offset(0, 1),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-
-  Widget _buildHorizontalColorDot(Color color) {
-    final isSelected = _selectedColor == color;
-
-    return GestureDetector(
-      onTap: () => setState(() => _selectedColor = color),
-      child: Container(
-        width: 28,
-        height: 28,
-        margin: EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? Colors.indigo : Colors.grey.shade300,
-            width: isSelected ? 2.5 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-            BoxShadow(
-              color: Colors.indigo.withOpacity(0.3),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ]
-              : null,
-        ),
-        child: isSelected
-            ? Icon(
-          Icons.check,
-          size: 14,
-          color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-        )
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildHorizontalActionButton(IconData icon, String label, VoidCallback onTap, {bool isClose = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isClose ? Colors.red.withOpacity(0.1) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isClose ? Colors.red.shade200 : Colors.grey.shade200,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isClose ? Colors.red : Colors.grey.shade600,
-            ),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: isClose ? Colors.red : Colors.grey.shade600,
-              ),
             ),
           ],
         ),
